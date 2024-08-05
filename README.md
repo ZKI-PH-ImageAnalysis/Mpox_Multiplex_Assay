@@ -23,7 +23,7 @@ cd Mpox_Multiplex_Assay
 
 **Create and Activate the Conda Environment**
 ```
-conda create -n Mpox_Classifier -f environment.yml
+conda env create -f environment.yml
 conda activate Mpox_Classifier
 ```
 _Typical install time on a "normal" desktop computer: 5-10 minutes._
@@ -36,7 +36,7 @@ A small, simulated dataset is provided in the data folder. The dataset file is s
 
 **Run the Demo or Your Own Analysis**
 ```
-python main_final.py --input-file yourdata.csv --outdir results-dir/
+python main.py --input-file yourdata.csv --outdir results-dir/
 ```
 For your own data, replace data/sample_data.csv with the path to your CSV file and demo_results with your desired output directory.
 
