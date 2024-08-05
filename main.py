@@ -12,7 +12,6 @@ import itertools
 from sklearn.model_selection import StratifiedKFold
 
 # algorithm_list = ["LDA", "RF", "XGBoost", "LDA_Threshold", "LDA_RF"]
-# antibody_list = ["IgM_IgG", "IgG"] # IgG
 antibody_list = ["IgM_IgG", "IgG"]
 sero_list = ["all"]
 data_cols_list = [ "dataIn"]
@@ -129,6 +128,7 @@ def preprocess_data(
     sero_th="all",
     data_column="data",
     exclude_features=("None"),
+    preprocessed=True,
 ):
     """
     Antibody: "IgG", "IgM", "IgM_IgG"
@@ -137,82 +137,82 @@ def preprocess_data(
     panel: "all", "acute", "epi"
     exclude_features: list of features we would like to exclude for example ["M1", "L1R"]
     """
-
-    # Replace -inf with NaN
-    df_in.replace([np.inf, -np.inf], np.nan, inplace=True)
-
-    # Fow now filter antibody values
-    if antibody == "IgM_IgG":
-        # Filter out IgA or other analytes
-        df_in = df_in[df_in["isotype"].isin(["IgM", "IgG"])]
-        df_in["analyte"] = df_in["isotype"] + "_" + df_in["analyte"]
+    if preprocessed:
+        df_out = df_in
     else:
-        df_in = df_in[df_in["isotype"] == antibody]
-        df_in["analyte"] = df_in["isotype"] + "_" + df_in["analyte"]
-    
-    # Only select necessary columns, for now Analyte(s)
-    df_in = df_in[
-        [
-            "sampleID_metadata",
-            "panel_detail",
-            "panel",
-            "analyte",
-            data_column,
-            "serostatus_cat.delta",
+        # Replace -inf with NaN
+        df_in.replace([np.inf, -np.inf], np.nan, inplace=True)
+
+        # Fow now filter antibody values
+        if antibody == "IgM_IgG":
+            # Filter out IgA or other analytes
+            df_in = df_in[df_in["isotype"].isin(["IgM", "IgG"])]
+            df_in["analyte"] = df_in["isotype"] + "_" + df_in["analyte"]
+        else:
+            df_in = df_in[df_in["isotype"] == antibody]
+            df_in["analyte"] = df_in["isotype"] + "_" + df_in["analyte"]
+        
+        # Only select necessary columns, for now Analyte(s)
+        df_in = df_in[
+            [
+                "sampleID_metadata",
+                "panel_detail",
+                "panel",
+                "analyte",
+                data_column,
+                "serostatus_cat.delta",
+            ]
         ]
-    ]
 
-    # Add column for explicit serostatus of delta antigen
-    df_in["serostatus_delta_IgG"] = df_in.apply(lambda x: x['serostatus_cat.delta'] if x["analyte"] == "IgG_Delta" else np.nan, axis=1)
-    serostatus_IDs = df_in[df_in["serostatus_delta_IgG"].notna()]
+        # Add column for explicit serostatus of delta antigen
+        df_in["serostatus_delta_IgG"] = df_in.apply(lambda x: x['serostatus_cat.delta'] if x["analyte"] == "IgG_Delta" else np.nan, axis=1)
+        serostatus_IDs = df_in[df_in["serostatus_delta_IgG"].notna()]
 
-    if sero_th == "positive":
-        serostatus_IDs = serostatus_IDs[serostatus_IDs["serostatus_delta_IgG"].isin(["positive"])]
-    elif sero_th == "borderline positive":
-        serostatus_IDs = serostatus_IDs[
-            serostatus_IDs["serostatus_delta_IgG"].isin(["borderline positive", "positive"])
-        ]
-    serostatus_IDs = serostatus_IDs["sampleID_metadata"].unique()
-
+        if sero_th == "positive":
+            serostatus_IDs = serostatus_IDs[serostatus_IDs["serostatus_delta_IgG"].isin(["positive"])]
+        elif sero_th == "borderline positive":
+            serostatus_IDs = serostatus_IDs[
+                serostatus_IDs["serostatus_delta_IgG"].isin(["borderline positive", "positive"])
+            ]
+        serostatus_IDs = serostatus_IDs["sampleID_metadata"].unique()
 
 
-    print(
-        f"ATTENTION: Dataframe includes {df_in.panel_detail.isna().sum()} rows with NaN values in panel_detail.\
-        These will be excluded from further analysis."
-    )
 
-    # Drop NaN
-    df_in = df_in[df_in["panel_detail"].notna()]
+        print(
+            f"ATTENTION: Dataframe includes {df_in.panel_detail.isna().sum()} rows with NaN values in panel_detail.\
+            These will be excluded from further analysis."
+        )
 
-    # Group by patient ID so that we have analytes as columns
-    df_out = group_df_analyte(df_in, data_column=data_column)
+        # Drop NaN
+        df_in = df_in[df_in["panel_detail"].notna()]
 
+        # Group by patient ID so that we have analytes as columns
+        df_out = group_df_analyte(df_in, data_column=data_column)
 
-    # Drop column if in exclude_features
-    # need to use endswith so it will work with IgM+IgG data
-    # where columns look like this "IgM_M1", "IgG_M1", ..
-    cols_to_drop = df_out.columns[df_out.columns.str.endswith(exclude_features)]
-    df_out = df_out.drop(cols_to_drop, axis=1, errors="ignore")
+        # Drop column if in exclude_features
+        # need to use endswith so it will work with IgM+IgG data
+        # where columns look like this "IgM_M1", "IgG_M1", ..
+        cols_to_drop = df_out.columns[df_out.columns.str.endswith(exclude_features)]
+        df_out = df_out.drop(cols_to_drop, axis=1, errors="ignore")
 
-    # Convert multi-index to columns
-    df_out = df_out.reset_index()
+        # Convert multi-index to columns
+        df_out = df_out.reset_index()
+        
+        # Filter out IDs from csv
+        if filter_csv is not None and os.path.isfile(filter_csv):
+            df_filter = pd.read_csv(filter_csv, low_memory=False)
+            df_filter = df_filter.rename(columns={"excludeIDs": "sampleID_metadata"})
+            print(f"Filtering: {len(df_filter)} samples were removed from analysis.")
+            df_joined = df_out.merge(df_filter, on='sampleID_metadata', how="inner", indicator=True).drop("_merge", axis=1)
+            df_out = df_out.merge(df_filter, on='sampleID_metadata', how="outer", indicator=True)
+            df_out = df_out[df_out['_merge'] == 'left_only'].drop("_merge", axis=1)
+
+        # Filter only for the serostatus of delta IgG
+        if not sero_th == "all":
+            df_out = df_out[df_out['sampleID_metadata'].isin(serostatus_IDs)]
     
-    # Filter out IDs from csv
-    if filter_csv is not None and os.path.isfile(filter_csv):
-        df_filter = pd.read_csv(filter_csv, low_memory=False)
-        df_filter = df_filter.rename(columns={"excludeIDs": "sampleID_metadata"})
-        print(f"Filtering: {len(df_filter)} samples were removed from analysis.")
-        df_joined = df_out.merge(df_filter, on='sampleID_metadata', how="inner", indicator=True).drop("_merge", axis=1)
-        df_out = df_out.merge(df_filter, on='sampleID_metadata', how="outer", indicator=True)
-        df_out = df_out[df_out['_merge'] == 'left_only'].drop("_merge", axis=1)
-
-    # Filter only for the serostatus of delta IgG
-    if not sero_th == "all":
-        df_out = df_out[df_out['sampleID_metadata'].isin(serostatus_IDs)]
-
     # Reset index
     df_out = df_out.set_index(["sampleID_metadata"])
-
 
     # drop this again
     # df_out = df_out.drop("serostatus_delta_IgG", axis=1)
@@ -319,7 +319,13 @@ def set_split(df_train, df_test, seed, n_split=5):
     help = "Path to results directory",
     default = ".../results_tmp/",
 )
-def main(input_file, filter, outdir):
+@click.option(
+    "--preprocessed-input",
+    type=bool,
+    help = "Bool value if inputfile csv is already preprocessed",
+    default = True,
+)
+def main(input_file, filter, outdir, preprocessed_input):
     df_assay = pd.read_csv(input_file, low_memory=False)
 
     d = {}
@@ -333,6 +339,7 @@ def main(input_file, filter, outdir):
             sero_th=sero_status,
             data_column=data_col,
             exclude_features=exclude_cols,
+            preprocessed=preprocessed_input,
         )
         # just for readability when saving files
         exclude_cols = "".join(exclude_cols)
@@ -557,72 +564,72 @@ def main(input_file, filter, outdir):
                         False,
                         norm=True
                     )
-                
-                accuracy[idx_panel][5][run], precision[idx_panel][5][run], recall[idx_panel][5][run], f1[idx_panel][5][run] = FRBC(
-                    str(df_name_with_panel)+"-TRAIN",
-                    str(df_name_with_panel)+"-TEST",
-                    str(df_name_with_panel)+"-SPOX",
-                    frbc_params,
-                    5,
-                    train_sets_frbc,
-                    spox_set_frbc,
-                    seeds[run],
-                    run,
-                    "frbc_threshold",
-                    metrics_folder,
-                    cm_folder,
-                    mis_folder,
-                    class_threshold_folder,
-                    classified_folder,
-                    rule_folder,
-                    unknown_pred_folder,
-                    df_name_with_panel,
-                    0.5,
-                    True
-                )
-                accuracy[idx_panel][6][run], precision[idx_panel][6][run], recall[idx_panel][6][run], f1[idx_panel][6][run] = FRBC(
-                    str(df_name_with_panel)+"-TRAIN",
-                    str(df_name_with_panel)+"-TEST",
-                    str(df_name_with_panel)+"-SPOX",
-                    frbc_params,
-                    5,
-                    train_sets_frbc,
-                    spox_set_frbc,
-                    seeds[run],
-                    run,
-                    "frbc",
-                    metrics_folder,
-                    cm_folder,
-                    mis_folder,
-                    class_threshold_folder,
-                    classified_folder,
-                    rule_folder,
-                    unknown_pred_folder,
-                    df_name_with_panel,
-                    None,
-                    False
-                )
-                if len(y_train.unique()) > 2:
-                    accuracy[idx_panel][7][run], precision[idx_panel][7][run], recall[idx_panel][7][run], f1[idx_panel][7][run] = LDA_FRBC(
+                if preprocessed_input == False:
+                    accuracy[idx_panel][5][run], precision[idx_panel][5][run], recall[idx_panel][5][run], f1[idx_panel][5][run] = FRBC(
                         str(df_name_with_panel)+"-TRAIN",
                         str(df_name_with_panel)+"-TEST",
                         str(df_name_with_panel)+"-SPOX",
-                        lda_frbc_params,
+                        frbc_params,
                         5,
                         train_sets_frbc,
                         spox_set_frbc,
                         seeds[run],
                         run,
-                        "lda_frbc",
+                        "frbc_threshold",
                         metrics_folder,
                         cm_folder,
                         mis_folder,
+                        class_threshold_folder,
                         classified_folder,
                         rule_folder,
                         unknown_pred_folder,
-                        min(2, len(df_train["panel_detail"].unique()) - 1),
                         df_name_with_panel,
-                    ) 
+                        0.5,
+                        True
+                    )
+                    accuracy[idx_panel][6][run], precision[idx_panel][6][run], recall[idx_panel][6][run], f1[idx_panel][6][run] = FRBC(
+                        str(df_name_with_panel)+"-TRAIN",
+                        str(df_name_with_panel)+"-TEST",
+                        str(df_name_with_panel)+"-SPOX",
+                        frbc_params,
+                        5,
+                        train_sets_frbc,
+                        spox_set_frbc,
+                        seeds[run],
+                        run,
+                        "frbc",
+                        metrics_folder,
+                        cm_folder,
+                        mis_folder,
+                        class_threshold_folder,
+                        classified_folder,
+                        rule_folder,
+                        unknown_pred_folder,
+                        df_name_with_panel,
+                        None,
+                        False
+                    )
+                    if len(y_train.unique()) > 2:
+                        accuracy[idx_panel][7][run], precision[idx_panel][7][run], recall[idx_panel][7][run], f1[idx_panel][7][run] = LDA_FRBC(
+                            str(df_name_with_panel)+"-TRAIN",
+                            str(df_name_with_panel)+"-TEST",
+                            str(df_name_with_panel)+"-SPOX",
+                            lda_frbc_params,
+                            5,
+                            train_sets_frbc,
+                            spox_set_frbc,
+                            seeds[run],
+                            run,
+                            "lda_frbc",
+                            metrics_folder,
+                            cm_folder,
+                            mis_folder,
+                            classified_folder,
+                            rule_folder,
+                            unknown_pred_folder,
+                            min(2, len(df_train["panel_detail"].unique()) - 1),
+                            df_name_with_panel,
+                        ) 
                               
         panel_l = [p for p in itertools.product([df_all, df_acute, df_epi], repeat=2)]
         for panel_idx, (df_train, df_test) in enumerate(panel_l):
