@@ -26,26 +26,32 @@ cd Mpox_Multiplex_Assay
 conda env create -f environment.yml
 conda activate Mpox_Classifier
 ```
-_Typical install time on a "normal" desktop computer: 5-10 minutes._
+_Typical install time on a standard desktop computer: 5-10 minutes._
 
 ## Quickstart
 
 **Prepare the data**
 
-A small, simulated dataset is provided in the data folder. The dataset file is sample_data.csv.
+A script to generate a simulated dataset is provided. Adjust the number of rows and other parameters in the script as needed. To generate simulated data, run:
+```
+python simulate-data.py
+```
+This will create a CSV file named simulated_data.csv.
 
 **Run the Demo or Your Own Analysis**
 ```
-python main.py --input-file yourdata.csv --outdir results-dir/
+python main.py --input-file simulated_data.csv --outdir results-dir/
 ```
-For your own data, replace data/sample_data.csv with the path to your CSV file and demo_results with your desired output directory.
+For your own data, replace simulated_data.csv with the path to your CSV file and results-dir/ with your desired output directory.
 
-Ensure your data is in CSV format. Columns should match those in the provided sample dataset.
+Ensure your data is in CSV format and the columns match those in the provided sample dataset.
 
-_Expected run time on a "normal" desktop computer: Approximately 5-10 minutes._
+If your input CSV is not preprocessed, add the `--preprocessed-input False` parameter.
+
+_Expected runtime on a standard desktop computer: Approximately 10-20 minutes. You can reduce the size of the simulated data if the runtime is too long._
 
 ## Parameters
-Detailed parameters and their descriptions can be found at the top of main_final.py.
+Detailed parameters and their descriptions can be found at the top of main.py.
 
 ## Set of algorithms
 The following algorithms are evaluated:
