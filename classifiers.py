@@ -852,6 +852,11 @@ def FRBC(
     nEvals = params[2]
     capacity = params[3]
     divisions = params[4]
+
+    accuracy_spox = 0
+    precision_spox = 0
+    recall_spox = 0
+    f1_spox = 0
     
     algs = ["moead", "nsga3", "spea2", "mpaes22"]
 
@@ -1245,6 +1250,11 @@ def LDA_FRBC(
     nEvals = params[2]
     capacity = params[3]
     divisions = params[4]
+
+    accuracy_spox = 0
+    precision_spox = 0
+    recall_spox = 0
+    f1_spox = 0
     
     algs = ["moead", "nsga3", "spea2", "mpaes22"]
 
