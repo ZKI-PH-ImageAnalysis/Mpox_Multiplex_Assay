@@ -17,9 +17,9 @@ sero_list = ["all"]
 data_cols_list = [ "dataIn"]
 exclusion_list = [("L1R", "M1", "VACV")] 
 # k for k-fold cross validation
-n_split = 2
+n_split = 5
 # How often we want to repeat k-fold cross validation 
-reps = 1
+reps = 3
 seed_runs = reps*n_split
 start_seed = 70
 
@@ -60,11 +60,11 @@ def process_for_skmoefs(
                 df = df.append(new)
     else:
         #print('is_spox columns\n', df.columns)
-        unique = df["panel"].unique()
-        unique_counter = df["panel"].value_counts(sort=False).values
+        unique = df["panel_detail"].unique()
+        unique_counter = df["panel_detail"].value_counts(sort=False).values
         for i in range(len(unique)):
             if unique_counter[i] == 1:
-                new = df.loc[df["panel"] == unique[i]]
+                new = df.loc[df["panel_detail"] == unique[i]]
                 df = df.append(new)
 
     cols = list(df.columns)
@@ -84,17 +84,17 @@ def process_for_skmoefs(
         df.replace({"panel_detail": "CPXV"}, {"panel_detail": 3}, inplace=True)
     else:
         last_col = cols[-1]
-        a, b = cols.index("panel"), cols.index(last_col)
+        a, b = cols.index("panel_detail"), cols.index(last_col)
         cols[b], cols[a] = cols[a], cols[b]
         df = df[cols]
 
-        df.replace({"panel": "MPXV"}, {"panel": 0}, inplace=True)
+        df.replace({"panel": "MPXV"}, {"panel_detail": 0}, inplace=True)
     
-        df.replace({"panel": "MVA"}, {"panel": 1}, inplace=True)
+        df.replace({"panel": "MVA"}, {"panel_detail": 1}, inplace=True)
     
-        df.replace({"panel": "Pre"}, {"panel": 2}, inplace=True)
+        df.replace({"panel": "Pre"}, {"panel_detail": 2}, inplace=True)
         
-        df.replace({"panel": "CPXV"}, {"panel": 3}, inplace=True)
+        df.replace({"panel": "CPXV"}, {"panel_detail": 3}, inplace=True)
 
     print('skmoefs\n', df)
 
@@ -167,22 +167,33 @@ def preprocess_spox(
     # Replace -inf with NaN
     df_in.replace([np.inf, -np.inf], np.nan, inplace=True)
 
+
+    # dataIn columns
+    dataIn_columns = [col for col in df_in.columns if col.startswith('dataIn')]
+    columns_to_keep = ['sampleID_meta', 'serostatus_cat.delta', 'panel']
+
+    # reshape
+    def transform_row(row):
+        new_data = {}
+        for col in dataIn_columns:
+            isotype = row['isotype']
+            base_name = col.split('_', 1)[1]  # Extract the base name after 'dataIn_'
+            new_column_name = f"{isotype}_{base_name}"
+            new_data[new_column_name] = row[col]
+        return new_data
+    transformed_rows = df_in.apply(transform_row, axis=1).apply(pd.Series)
+    df_in = pd.concat([df_in[columns_to_keep], transformed_rows], axis=1)
+    # drop duplicates
+    df_in = df_in.groupby('sampleID_meta', as_index=False).first()
+
     # Fow now filter antibody values
     if antibody == "IgM_IgG":
-        # Filter out IgA or other analytes
-        df_in = df_in[df_in["isotype"].isin(["IgM", "IgG"])]
+    # Keep all columns
+        df_in = df_in
     else:
-        df_in = df_in[df_in["isotype"] == antibody]
-    
-    df_in = df_in[
-        [
-            "sampleID_meta",
-            "panel",
-            "dataIn_A27L", "dataIn_A29", "dataIn_A33R", "dataIn_A35R", "dataIn_A5L", "dataIn_ATI-C", "dataIn_ATI-N", "dataIn_B5R", "dataIn_B6", 
-            "dataIn_D8L", "dataIn_Delta", "dataIn_E8", "dataIn_H3L", 
-            "serostatus_cat.delta",
-        ]
-    ]
+        # Choose only "IgG" or "IgM" columns
+        antibody_columns = [col for col in df_in.columns if col.startswith(antibody)]
+        df_in = df_in[['sampleID_meta', 'serostatus_cat.delta', 'panel'] + antibody_columns]
     
     # Add column for explicit serostatus of delta antigen
     df_in["serostatus_delta_IgG"] = df_in.apply(lambda x: x['serostatus_cat.delta'], axis=1)
@@ -200,7 +211,6 @@ def preprocess_spox(
         f"ATTENTION: Dataframe includes {df_in.panel.isna().sum()} rows with NaN values in panel_detail.\
         These will be excluded from further analysis."
     )
-
     # Drop NaN
     df_in = df_in[df_in["panel"].notna()]
     #df_in = df_in[df_in["dataIn_D8L"].notna()]
@@ -239,8 +249,11 @@ def preprocess_spox(
     # Remove the Spox and Spox_Rep columns
     df_out = df_out[df_out["panel"] != "SPox"]
     df_out = df_out[df_out["panel"] != "SPox_Rep"]
-    
-    df_all = df_out.drop(["serostatus_cat.delta", "serostatus_delta_IgG"], axis=1)
+
+    # Panel detail
+    df_out["panel_detail"] = df_out["panel"]
+
+    df_all = df_out.drop(["serostatus_cat.delta", "serostatus_delta_IgG", "panel"], axis=1)
     
     return df_all
 
@@ -272,13 +285,13 @@ def preprocess_data(
         if antibody == "IgM_IgG":
             # Filter out IgA or other analytes
             df_in = df_in[df_in["isotype"].isin(["IgM", "IgG"])]
-            #df_in["analyte"] = df_in["isotype"] + "_" + df_in["analyte"]
-            df_in["analyte"] = "dataIn_" + df_in["analyte"]
+            df_in["analyte"] = df_in["isotype"] + "_" + df_in["analyte"]
+            #df_in["analyte"] = "dataIn_" + df_in["analyte"]
         else:
             df_in = df_in[df_in["isotype"] == antibody]
-            #df_in["analyte"] = df_in["isotype"] + "_" + df_in["analyte"]
-            df_in["analyte"] = "dataIn_" + df_in["analyte"]
-        
+            df_in["analyte"] = df_in["isotype"] + "_" + df_in["analyte"]
+            #df_in["analyte"] = "dataIn_" + df_in["analyte"]
+
         # Only select necessary columns, for now Analyte(s)
         df_in = df_in[
             [
@@ -370,7 +383,14 @@ def preprocess_data(
             exclude_features,
             preprocessed
         )
-    print('is_spox columns\n', df_spox.columns)
+    # Specify columns to retain at the front
+    columns_to_keep = ['panel_detail']
+    # Get all other columns (excluding 'panel')
+    other_columns = [col for col in df_spox.columns if col != 'panel_detail']
+    # Order all columns alphabetically, starting with 'panel'
+    columns_order = columns_to_keep + sorted(other_columns)
+    # Reorder the DataFrame
+    df_spox = df_spox[columns_order]
     
     # Replace Pre_New samples with Pre
     df_out.loc[df_out.panel_detail == "Pre_New", 'panel_detail'] = "Pre"
@@ -379,13 +399,29 @@ def preprocess_data(
     df_out = df_out[df_out["panel_detail"] != "SPox"]
     df_out = df_out[df_out["panel_detail"] != "SPox_Rep"]
     
+    # Order all columns, start with panel detail, and then all other columns 
+    columns_to_keep = ['panel_detail']
+    # Get all other columns (excluding 'panel')
+    other_columns = [col for col in df_out.columns if col != 'panel_detail']
+    # Order all columns alphabetically, starting with 'panel'
+    columns_order = columns_to_keep + sorted(other_columns)
+    # Reorder the DataFrame
+    df_out = df_out[columns_order]
+
     # Split to the three panels and drop the panel column, not needed anymore
     df_all = df_out.drop(["panel"], axis=1)
     df_acute = df_out[df_out["panel"] != "SPox"].drop(["panel"], axis=1)
     df_epi = df_out[df_out["panel"] == "SPox"].drop(["panel"], axis=1)
 
+
     print('df_all\n', df_all)
     print('df_spox\n', df_spox)
+    # Compare these two dataframes and make sure they columns are ordered equally
+    if list(df_all.columns) == list(df_spox.columns):
+        print("The column order is identical.")
+    else:
+        print("The column order is different.")
+
     return df_all, df_acute, df_epi, df_spox
     
     
