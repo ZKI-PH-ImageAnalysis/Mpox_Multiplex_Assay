@@ -22,8 +22,6 @@ n_split = 5
 reps = 3
 seed_runs = reps*n_split
 start_seed = 70
-
-
     
 def group_df_analyte(df, data_column="data"):
     df = df.pivot_table(
@@ -88,13 +86,13 @@ def process_for_skmoefs(
         cols[b], cols[a] = cols[a], cols[b]
         df = df[cols]
 
-        df.replace({"panel": "MPXV"}, {"panel_detail": 0}, inplace=True)
+        df.replace({"panel_detail": "MPXV"}, {"panel_detail": 0}, inplace=True)
     
-        df.replace({"panel": "MVA"}, {"panel_detail": 1}, inplace=True)
+        df.replace({"panel_detail": "MVA"}, {"panel_detail": 1}, inplace=True)
     
-        df.replace({"panel": "Pre"}, {"panel_detail": 2}, inplace=True)
+        df.replace({"panel_detail": "Pre"}, {"panel_detail": 2}, inplace=True)
         
-        df.replace({"panel": "CPXV"}, {"panel_detail": 3}, inplace=True)
+        df.replace({"panel_detail": "CPXV"}, {"panel_detail": 3}, inplace=True)
 
     print('skmoefs\n', df)
 
