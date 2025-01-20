@@ -550,7 +550,6 @@ def main(input_file, test_file, filter, outdir, preprocessed_input):
         panel_l = [p for p in itertools.product([df_all, df_acute, df_epi], repeat=2)]
 
         # n_algs = len(algorithm_list)
-        # TODO Automatically choose size of the following arrays
 
         precision = np.zeros((len(panel_l), 10, len(seeds)))
         accuracy = np.zeros((len(panel_l), 10, len(seeds)))
@@ -595,8 +594,6 @@ def main(input_file, test_file, filter, outdir, preprocessed_input):
                 
                 print('df name', df_train.name)
                 X_train, y_train, X_test, y_test, cont = set_split(df_train, df_test, seeds[run], n_split)
-                     
-                
 
                 if cont == True:
                     continue
@@ -607,17 +604,6 @@ def main(input_file, test_file, filter, outdir, preprocessed_input):
                 test_set_frbc["panel_detail"] = y_test
                 
                 X_train, y_train, X_test, y_test, cont = set_split(df_train, df_test, seeds[run], n_split)
-                
-                """df_spox = preprocess_spox(
-                    test_file,
-                    filter,
-                    antibody=antibody,
-                    sero_th=sero_status,
-                    data_column=data_col,
-                    exclude_features=exclude_cols,
-                    preprocessed=preprocessed_input
-                )               
-                print('new spox\n', df_spox)"""
                 
                 df_name_with_panel = (
                     f"train_{df_train.columns.name }_test_{df_test.columns.name }_{df_name}"
@@ -823,15 +809,6 @@ def main(input_file, test_file, filter, outdir, preprocessed_input):
                             min(2, len(df_train["panel_detail"].unique()) - 1),
                             df_name_with_panel,
                         )
-                """df_spox = preprocess_spox(
-                    test_file,
-                    filter,
-                    antibody=antibody,
-                    sero_th=sero_status,
-                    data_column=data_col,
-                    exclude_features=exclude_cols,
-                    preprocessed=preprocessed_input
-                )"""
                 accuracy[idx_panel][8][run], precision[idx_panel][8][run], recall[idx_panel][8][run], f1[idx_panel][8][run], accuracy_spox[idx_panel][8][run], precision_spox[idx_panel][8][run], recall_spox[idx_panel][8][run], f1_spox[idx_panel][8][run], y_pred_rf_test, y_pred_rf_train = deeptables(
                     1000,
                     5,
