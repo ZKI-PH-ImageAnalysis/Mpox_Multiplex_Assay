@@ -127,6 +127,9 @@ def save_unknown_preds(df, folder, classifier_name, run, output_name):
     elif classifier_name == "xgboost":
         directory = "xgboost"
         parent_dir = os.path.join(folder, directory)
+    elif classifier_name == "deeptables":
+        directory = "deeptables"
+        parent_dir = os.path.join(folder, directory)
 
     if os.path.exists(parent_dir + "/") == False:
         # os.mkdir(parent_dir)
@@ -185,6 +188,9 @@ def save_metrics(
         parent_dir = os.path.join(folder, directory)
     elif classifier_name == "xgboost":
         directory = "xgboost"
+        parent_dir = os.path.join(folder, directory)
+    elif classifier_name == "deeptables":
+        directory = "deeptables"
         parent_dir = os.path.join(folder, directory)
 
     if os.path.exists(parent_dir + "/") == False:
@@ -255,6 +261,9 @@ def save_confusion_matrix(
         parent_dir = os.path.join(folder, directory)
     elif classifier_name == "xgboost":
         directory = "xgboost"
+        parent_dir = os.path.join(folder, directory)
+    elif classifier_name == "deeptables":
+        directory = "deeptables"
         parent_dir = os.path.join(folder, directory)
 
     if os.path.exists(parent_dir + "/") == False:
@@ -328,6 +337,9 @@ def save_misclassified_data(
     elif classifier_name == "xgboost":
         directory = "xgboost"
         parent_dir = os.path.join(folder, directory)
+    elif classifier_name == "deeptables":
+        directory = "deeptables"
+        parent_dir = os.path.join(folder, directory)
 
     if os.path.exists(parent_dir + "/") == False:
         # os.mkdir(parent_dir)
@@ -395,7 +407,7 @@ def save_classified_with_threshold(
     df["pred"] = y_test_pred
     
     if threshold_use == True:   
-        df_out = df[(df["conf_degree"] > threshold_value) & (df["real"] == df["pred"])]
+        df_out = df[(df["conf_degree"] >= threshold_value) & (df["real"] == df["pred"])]
         df_out.to_csv(path)
         
         
@@ -430,6 +442,9 @@ def save_classified_general(
         parent_dir = os.path.join(folder, directory)
     elif classifier_name == "xgboost":
         directory = "xgboost"
+        parent_dir = os.path.join(folder, directory)
+    elif classifier_name == "deeptables":
+        directory = "deeptables"
         parent_dir = os.path.join(folder, directory)
 
     if os.path.exists(parent_dir + "/") == False:
@@ -474,66 +489,116 @@ def save_classified_general(
 
 
 def save_lda_plot(X_train, y_train, X_test, y_test_pred, lda, outdir, output_name, run):
-    if not os.path.exists(outdir):
-        os.makedirs(outdir)
+    # Ensure the output directory exists
+    os.makedirs(outdir, exist_ok=True)
+
+    # Define common style for publication
+    plt.style.use('seaborn-v0_8-paper')
+    plt.rcParams.update({
+        'font.size': 14,  # Increase font size
+        'axes.titlesize': 16,
+        'axes.labelsize': 14,
+        'xtick.labelsize': 14,
+        'ytick.labelsize': 14,
+        'legend.fontsize': 14
+    })
+
+    # Prepare the LDA transformed data
     target_names = pd.unique(y_train)
     y1 = lda.transform(X_test)
-    for l,c,m in zip(target_names,['r','g','b'],['s','x','o']):
-        plt.scatter(y1[y_test_pred==l, 0],
-                    y1[y_test_pred==l, 1],
-                    c=c, marker=m, label=l,edgecolors='black')
-    
-    x1 = np.array([np.min(y1, axis=1), np.max(y1, axis=1)])
-    for i, c in enumerate(['r','g','b']):
+
+    # Create the plot
+    plt.figure(figsize=(12, 10))
+
+    # Scatter plot for each class
+    for l, c, m in zip(target_names, ['r', 'g', 'b'], ['s', 'x', 'o']):
+        plt.scatter(
+            y1[y_test_pred == l, 0],
+            y1[y_test_pred == l, 1],
+            c=c, marker=m, label=l, edgecolors='black', s=100
+        )
+
+    # Plot decision boundaries
+    x1 = np.linspace(np.min(y1[:, 0]), np.max(y1[:, 0]), 100)
+    for i, c in enumerate(['r', 'g', 'b']):
         b, w1, w2 = lda.intercept_[i], lda.coef_[i][0], lda.coef_[i][1]
-        y2 = -(b+x1*w1)/w2    
-        plt.plot(x1, y2,c=c)    
+        y2 = -(b + x1 * w1) / w2
+        plt.plot(x1, y2, c=c, linestyle='--', linewidth=2)
+
+    # Add legend and title
     plt.legend(loc="best", shadow=False, scatterpoints=1)
-    plt.title("LDA of Test dataset")
-    out_path = os.path.join(outdir, f"{output_name}_{run}")
-    plt.savefig(out_path)
+    plt.title("LDA of Test Dataset", fontsize=22)
+
+    # Save the plot
+    out_path = os.path.join(outdir, f"{output_name}_{run}.png")
+    plt.savefig(out_path, dpi=1200, bbox_inches='tight')
     plt.close()
 
 
-
 def export_feature_importance(X_train, y_train, X_test, y_test, classifier, outdir, output_name, run):
-    if not os.path.exists(outdir):
-        os.makedirs(outdir)
+    # Ensure the output directory exists
+    os.makedirs(outdir, exist_ok=True)
 
+    # Define common style for publication
+    plt.style.use('seaborn-v0_8-paper')
+    plt.rcParams.update({
+        'font.size': 14,  # Increase font size
+        'axes.titlesize': 16,
+        'axes.labelsize': 14,
+        'xtick.labelsize': 14,
+        'ytick.labelsize': 14,
+        'legend.fontsize': 14
+    })
 
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 8))
-    result = permutation_importance(classifier, X_train, y_train, n_repeats=10, random_state=42, n_jobs=2)
-    perm_sorted_idx = result.importances_mean.argsort()
+    # Plot training set feature importances
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 8))
+
+    # Permutation importance (training set)
+    result_train = permutation_importance(
+        classifier, X_train, y_train, n_repeats=10, random_state=42, n_jobs=2
+    )
+    perm_sorted_idx_train = result_train.importances_mean.argsort()
     ax1.boxplot(
-        result.importances[perm_sorted_idx].T,
+        result_train.importances[perm_sorted_idx_train].T,
         vert=False,
-        labels=X_test.columns[perm_sorted_idx],
+        labels=X_train.columns[perm_sorted_idx_train],
     )
     ax1.axvline(x=0, color="k", linestyle="--")
     ax1.set_xlabel("Decrease in accuracy score")
+    ax1.set_title("Permutation Importances (Training Set)")
 
+    # Impurity-based importance (training set)
     mdi_importances = pd.Series(classifier.feature_importances_, index=X_train.columns)
-    mdi_importances.sort_values().plot.barh(ax=ax2)
-    ax2.set_xlabel("Gini importance")
-    fig.suptitle(
-    "Permutation vs. Impurity-based importances on features (train set)"
-    )
-    out_path = os.path.join(outdir, f"{output_name}_{run}_{classifier.__class__.__name__}_TRAIN.png")
-    fig.savefig(out_path)
-    
-    fig, ax = plt.subplots(figsize=(7, 6))
-    result = permutation_importance(classifier, X_test, y_test, n_repeats=10, random_state=42, n_jobs=2)
-    perm_sorted_idx = result.importances_mean.argsort()
-    ax.boxplot(
-        result.importances[perm_sorted_idx].T,
-        vert=False,
-        labels=X_test.columns[perm_sorted_idx],
-    )
-    ax.set_title("Permutation Importances on features\n(test set)")
-    ax.set_xlabel("Decrease in accuracy score")
-    out_path = os.path.join(outdir, f"{output_name}_{run}_{classifier.__class__.__name__}_TEST.png")
-    fig.savefig(out_path)
+    mdi_importances.sort_values().plot.barh(ax=ax2, color='teal')
+    ax2.set_xlabel("Gini Importance")
+    ax2.set_title("Impurity-Based Importances (Training Set)")
 
+    fig.suptitle("Feature Importances on Training Set", fontsize=18)
+    fig.tight_layout()
+    out_path_train = os.path.join(outdir, f"{output_name}_{run}_{classifier.__class__.__name__}_TRAIN.png")
+    fig.savefig(out_path_train, dpi=1200, bbox_inches='tight')
+    plt.close(fig)
+
+    # Plot test set feature importances
+    fig, ax = plt.subplots(figsize=(10, 8))
+
+    result_test = permutation_importance(
+        classifier, X_test, y_test, n_repeats=10, random_state=42, n_jobs=2
+    )
+    perm_sorted_idx_test = result_test.importances_mean.argsort()
+    ax.boxplot(
+        result_test.importances[perm_sorted_idx_test].T,
+        vert=False,
+        labels=X_test.columns[perm_sorted_idx_test],
+    )
+    ax.axvline(x=0, color="k", linestyle="--")
+    ax.set_title("Permutation Importances (Test Set)", fontsize=16)
+    ax.set_xlabel("Decrease in accuracy score")
+
+    fig.tight_layout()
+    out_path_test = os.path.join(outdir, f"{output_name}_{run}_{classifier.__class__.__name__}_TEST.png")
+    fig.savefig(out_path_test, dpi=1200, bbox_inches='tight')
+    plt.close(fig)
 
 
 def save_statistical_report(accuracy, precision, recall, f1, output_name, folder):
@@ -541,7 +606,7 @@ def save_statistical_report(accuracy, precision, recall, f1, output_name, folder
         os.makedirs(folder)
     path = folder + str(output_name) + ".txt"
 
-    algs = ["lda_th", "lda", "rf", "xgboost", "lda_rf", "frbc_th", "frbc", "lda_frbc"]
+    algs = ["lda_th", "lda", "rf", "xgboost", "lda_rf", "frbc_th", "frbc", "lda_frbc", "deeptables"]
     metrics = ["accuracy", "precision", "recall", "fscore"]
 
     f = open(path, "w")

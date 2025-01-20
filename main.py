@@ -17,9 +17,9 @@ sero_list = ["all"]
 data_cols_list = [ "dataIn"]
 exclusion_list = [("L1R", "M1", "VACV")] 
 # k for k-fold cross validation
-n_split = 5
+n_split = 2
 # How often we want to repeat k-fold cross validation 
-reps = 3
+reps = 1
 seed_runs = reps*n_split
 start_seed = 70
 
@@ -50,12 +50,21 @@ def process_for_skmoefs(
     panel_name="df_igg_all_panel",
 ):
     #frbc_labels -> removed as it wasn't used
+    print("spox True or False:", is_spox)
     if is_spox == False:
         unique = df["panel_detail"].unique()
         unique_counter = df["panel_detail"].value_counts(sort=False).values
         for i in range(len(unique)):
             if unique_counter[i] == 1:
                 new = df.loc[df["panel_detail"] == unique[i]]
+                df = df.append(new)
+    else:
+        #print('is_spox columns\n', df.columns)
+        unique = df["panel"].unique()
+        unique_counter = df["panel"].value_counts(sort=False).values
+        for i in range(len(unique)):
+            if unique_counter[i] == 1:
+                new = df.loc[df["panel"] == unique[i]]
                 df = df.append(new)
 
     cols = list(df.columns)
@@ -73,6 +82,21 @@ def process_for_skmoefs(
         df.replace({"panel_detail": "Pre"}, {"panel_detail": 2}, inplace=True)
         
         df.replace({"panel_detail": "CPXV"}, {"panel_detail": 3}, inplace=True)
+    else:
+        last_col = cols[-1]
+        a, b = cols.index("panel"), cols.index(last_col)
+        cols[b], cols[a] = cols[a], cols[b]
+        df = df[cols]
+
+        df.replace({"panel": "MPXV"}, {"panel": 0}, inplace=True)
+    
+        df.replace({"panel": "MVA"}, {"panel": 1}, inplace=True)
+    
+        df.replace({"panel": "Pre"}, {"panel": 2}, inplace=True)
+        
+        df.replace({"panel": "CPXV"}, {"panel": 3}, inplace=True)
+
+    print('skmoefs\n', df)
 
     data_np = df.to_numpy()
 
@@ -86,8 +110,8 @@ def process_for_skmoefs(
     cols = list(df.columns)
     
     last = len(cols) - 1
-    if is_spox == True:
-        last = len(cols)
+    #if is_spox == True:
+    #    last = len(cols)
     for i in range(last):
         f.write("@attribute ")
         f.write(str(cols[i]))
@@ -121,14 +145,115 @@ def process_for_skmoefs(
     f.close()
 
 
+def preprocess_spox(
+    input_file,
+    filter_csv,
+    antibody="IgG",
+    sero_th="all",
+    data_column="dataIn",
+    exclude_features=("None"),
+    preprocessed=False,
+):
+    """
+    Antibody: "IgG", "IgM", "IgM_IgG"
+    sero_th: "all", "positive", "borderline positive"
+    data_column: "data", "dataln"
+    panel: "all", "acute", "epi"
+    exclude_features: list of features we would like to exclude for example ["M1", "L1R"]
+    """
+    df_in = pd.read_csv(input_file, low_memory=False)
+    df_in = df_in.dropna()
+    
+    # Replace -inf with NaN
+    df_in.replace([np.inf, -np.inf], np.nan, inplace=True)
+
+    # Fow now filter antibody values
+    if antibody == "IgM_IgG":
+        # Filter out IgA or other analytes
+        df_in = df_in[df_in["isotype"].isin(["IgM", "IgG"])]
+    else:
+        df_in = df_in[df_in["isotype"] == antibody]
+    
+    df_in = df_in[
+        [
+            "sampleID_meta",
+            "panel",
+            "dataIn_A27L", "dataIn_A29", "dataIn_A33R", "dataIn_A35R", "dataIn_A5L", "dataIn_ATI-C", "dataIn_ATI-N", "dataIn_B5R", "dataIn_B6", 
+            "dataIn_D8L", "dataIn_Delta", "dataIn_E8", "dataIn_H3L", 
+            "serostatus_cat.delta",
+        ]
+    ]
+    
+    # Add column for explicit serostatus of delta antigen
+    df_in["serostatus_delta_IgG"] = df_in.apply(lambda x: x['serostatus_cat.delta'], axis=1)
+    serostatus_IDs = df_in[df_in["serostatus_delta_IgG"].notna()]
+
+    if sero_th == "positive":
+        serostatus_IDs = serostatus_IDs[serostatus_IDs["serostatus_delta_IgG"].isin(["positive"])]
+    elif sero_th == "borderline positive":
+        serostatus_IDs = serostatus_IDs[
+            serostatus_IDs["serostatus_delta_IgG"].isin(["borderline positive", "positive"])
+        ]
+    serostatus_IDs = serostatus_IDs["sampleID_meta"].unique()
+
+    print(
+        f"ATTENTION: Dataframe includes {df_in.panel.isna().sum()} rows with NaN values in panel_detail.\
+        These will be excluded from further analysis."
+    )
+
+    # Drop NaN
+    df_in = df_in[df_in["panel"].notna()]
+    #df_in = df_in[df_in["dataIn_D8L"].notna()]
+
+    # Group by patient ID so that we have analytes as columns
+    df_out = df_in
+
+    # Drop column if in exclude_features
+    # need to use endswith so it will work with IgM+IgG data
+    # where columns look like this "IgM_M1", "IgG_M1", ..
+    cols_to_drop = df_out.columns[df_out.columns.str.endswith(exclude_features)]
+    df_out = df_out.drop(cols_to_drop, axis=1, errors="ignore")
+
+    # Filter out IDs from csv
+    if filter_csv is not None and os.path.isfile(filter_csv):
+        df_filter = pd.read_csv(filter_csv, low_memory=False)
+        df_filter = df_filter.rename(columns={"excludeIDs": "sampleID_meta"})
+        print(f"Filtering: {len(df_filter)} samples were removed from analysis.")
+        df_joined = df_out.merge(df_filter, on='sampleID_meta', how="inner", indicator=True).drop("_merge", axis=1)
+        df_out = df_out.merge(df_filter, on='sampleID_meta', how="outer", indicator=True)
+        df_out = df_out[df_out['_merge'] == 'left_only'].drop("_merge", axis=1)
+
+    # Filter only for the serostatus of delta IgG
+    if not sero_th == "all":
+        df_out = df_out[df_out['sampleID_meta'].isin(serostatus_IDs)]
+            
+    # Reset index
+    df_out = df_out.set_index(["sampleID_meta"])
+
+    # Remove CPXV for now
+    df_out = df_out[df_out["panel"] != "CPXV"]
+    
+    # Replace Pre_New samples with Pre
+    df_out.loc[df_out.panel == "Pre_New", 'panel'] = "Pre"
+
+    # Remove the Spox and Spox_Rep columns
+    df_out = df_out[df_out["panel"] != "SPox"]
+    df_out = df_out[df_out["panel"] != "SPox_Rep"]
+    
+    df_all = df_out.drop(["serostatus_cat.delta", "serostatus_delta_IgG"], axis=1)
+    
+    return df_all
+
+
 def preprocess_data(
     df_in,
+    test_file,
     filter_csv,
     antibody="IgG",
     sero_th="all",
     data_column="data",
     exclude_features=("None"),
-    preprocessed=True,
+    preprocessed=False,
 ):
     """
     Antibody: "IgG", "IgM", "IgM_IgG"
@@ -147,10 +272,12 @@ def preprocess_data(
         if antibody == "IgM_IgG":
             # Filter out IgA or other analytes
             df_in = df_in[df_in["isotype"].isin(["IgM", "IgG"])]
-            df_in["analyte"] = df_in["isotype"] + "_" + df_in["analyte"]
+            #df_in["analyte"] = df_in["isotype"] + "_" + df_in["analyte"]
+            df_in["analyte"] = "dataIn_" + df_in["analyte"]
         else:
             df_in = df_in[df_in["isotype"] == antibody]
-            df_in["analyte"] = df_in["isotype"] + "_" + df_in["analyte"]
+            #df_in["analyte"] = df_in["isotype"] + "_" + df_in["analyte"]
+            df_in["analyte"] = "dataIn_" + df_in["analyte"]
         
         # Only select necessary columns, for now Analyte(s)
         df_in = df_in[
@@ -175,8 +302,6 @@ def preprocess_data(
                 serostatus_IDs["serostatus_delta_IgG"].isin(["borderline positive", "positive"])
             ]
         serostatus_IDs = serostatus_IDs["sampleID_metadata"].unique()
-
-
 
         print(
             f"ATTENTION: Dataframe includes {df_in.panel_detail.isna().sum()} rows with NaN values in panel_detail.\
@@ -221,13 +346,13 @@ def preprocess_data(
     df_out = df_out[df_out["panel_detail"] != "CPXV"]
 
     # Extract the unknown samples as df_spox
-    df_spox = df_out[df_out["panel_detail"] == "SPox"].drop(["panel"], axis=1)
+    #df_spox = df_out[df_out["panel_detail"] == "SPox"].drop(["panel"], axis=1)
 
     # Join the filtered out samples to the Spox dataframe
-    if filter_csv is not None and os.path.isfile(filter_csv):
-        df_joined = df_joined.drop("panel", axis=1)
-        df_joined = df_joined.set_index(["sampleID_metadata"])
-        df_spox = pd.concat([df_spox, df_joined])
+    #if filter_csv is not None and os.path.isfile(filter_csv):
+    #    df_joined = df_joined.drop("panel", axis=1)
+    #    df_joined = df_joined.set_index(["sampleID_metadata"])
+    #    df_spox = pd.concat([df_spox, df_joined])
 
 
     # extract the repetition panel
@@ -235,8 +360,17 @@ def preprocess_data(
     # Add -rep to ID
     df_rep = df_rep.rename(index=lambda s: s + '-rep')
     # concat them both
-    df_spox = pd.concat([df_spox, df_rep])
-
+    #df_spox = pd.concat([df_spox, df_rep])
+    df_spox = preprocess_spox(
+            test_file,
+            filter_csv,
+            antibody,
+            sero_th,
+            data_column,
+            exclude_features,
+            preprocessed
+        )
+    print('is_spox columns\n', df_spox.columns)
     
     # Replace Pre_New samples with Pre
     df_out.loc[df_out.panel_detail == "Pre_New", 'panel_detail'] = "Pre"
@@ -250,6 +384,8 @@ def preprocess_data(
     df_acute = df_out[df_out["panel"] != "SPox"].drop(["panel"], axis=1)
     df_epi = df_out[df_out["panel"] == "SPox"].drop(["panel"], axis=1)
 
+    print('df_all\n', df_all)
+    print('df_spox\n', df_spox)
     return df_all, df_acute, df_epi, df_spox
     
     
@@ -304,6 +440,14 @@ def set_split(df_train, df_test, seed, n_split=5):
     default = "dataInputAll.csv",
 )
 @click.option(
+    "--test-file",
+    type=click.Path(
+        exists=True, file_okay=True, dir_okay=False, path_type=pathlib.Path
+    ),
+    help = "Path to additional dataInput.csv",
+    default = "dataInputAll.csv",
+)
+@click.option(
     "--filter",
     type=click.Path(
         exists=True, file_okay=True, dir_okay=False, path_type=pathlib.Path
@@ -323,9 +467,9 @@ def set_split(df_train, df_test, seed, n_split=5):
     "--preprocessed-input",
     type=bool,
     help = "Bool value if inputfile csv is already preprocessed",
-    default = True,
+    default = False,
 )
-def main(input_file, filter, outdir, preprocessed_input):
+def main(input_file, test_file, filter, outdir, preprocessed_input):
     df_assay = pd.read_csv(input_file, low_memory=False)
 
     d = {}
@@ -334,6 +478,7 @@ def main(input_file, filter, outdir, preprocessed_input):
     ):
         df_all, df_acute, df_epi, df_spox = preprocess_data(
             df_assay,
+            test_file,
             filter,
             antibody=antibody,
             sero_th=sero_status,
@@ -355,6 +500,7 @@ def main(input_file, filter, outdir, preprocessed_input):
         os.makedirs(rule_folder)
     metrics_folder = os.path.join(outdir, "metrics/")
     stat_folder = os.path.join(outdir, "statistical_data/")
+    stat_folder_spox = os.path.join(outdir, "statistical_revised_data/")
     cm_folder = os.path.join(outdir, "confusion_matrices/")
     mis_folder = os.path.join(outdir, "misclassified_data/")
     class_threshold_folder = os.path.join(outdir, "classified_with_threshold/")
@@ -374,10 +520,15 @@ def main(input_file, filter, outdir, preprocessed_input):
         # n_algs = len(algorithm_list)
         # TODO Automatically choose size of the following arrays
 
-        precision = np.zeros((len(panel_l), 9, len(seeds)))
-        accuracy = np.zeros((len(panel_l), 9, len(seeds)))
-        recall = np.zeros((len(panel_l), 9, len(seeds)))
-        f1 = np.zeros((len(panel_l), 9, len(seeds)))
+        precision = np.zeros((len(panel_l), 10, len(seeds)))
+        accuracy = np.zeros((len(panel_l), 10, len(seeds)))
+        recall = np.zeros((len(panel_l), 10, len(seeds)))
+        f1 = np.zeros((len(panel_l), 10, len(seeds)))
+        
+        precision_spox = np.zeros((len(panel_l), 10, len(seeds)))
+        accuracy_spox = np.zeros((len(panel_l), 10, len(seeds)))
+        recall_spox = np.zeros((len(panel_l), 10, len(seeds)))
+        f1_spox = np.zeros((len(panel_l), 10, len(seeds)))
 
         # Loop for all panel combiniation         
         panel_l = [p for p in itertools.product([df_all, df_acute, df_epi], repeat=2)]
@@ -395,28 +546,24 @@ def main(input_file, filter, outdir, preprocessed_input):
             # Loop to test across all combination of panels
             panel_l = [p for p in itertools.product([df_all, df_acute, df_epi], repeat=2)]
             for idx_panel, (df_train, df_test) in enumerate(panel_l):
-                unique = df_train["panel_detail"].unique()
-                unique_counter = (
-                    df_train["panel_detail"].value_counts(sort=False).values
-                )
-                unique = df_test["panel_detail"].unique()
-                unique_counter = df_test["panel_detail"].value_counts(sort=False).values
+                unique_train = df_train["panel_detail"].unique()
+                unique_train_counter = df_train["panel_detail"].value_counts(sort=False).values
+                unique_test = df_test["panel_detail"].unique()
+                unique_test_counter = df_test["panel_detail"].value_counts(sort=False).values
 
-                for i in range(len(unique)):
-                    if unique_counter[i] == 1:
-                        new = df_train.loc[df_train["panel_detail"] == unique[i]]
+                for i in range(len(unique_train)):
+                    if unique_train_counter[i] == 1:
+                        new = df_train.loc[df_train["panel_detail"] == unique_train[i]]
                         df_train = df_train.append(new)
 
-                for i in range(len(unique)):
-                    if unique_counter[i] == 1:
-                        new = df_test.loc[df_test["panel_detail"] == unique[i]]
+                for i in range(len(unique_test)):
+                    if unique_test_counter[i] == 1:
+                        new = df_test.loc[df_test["panel_detail"] == unique_test[i]]
                         df_test = df_test.append(new)
                 
+                print('df name', df_train.name)
                 X_train, y_train, X_test, y_test, cont = set_split(df_train, df_test, seeds[run], n_split)
                      
-                # Test if they have same number of features
-                #if not set(y_train['panel_detail'].unique()) == set(y_test['panel_detail'].unique()):
-                #    continue
                 if cont == True:
                     continue
         
@@ -426,7 +573,19 @@ def main(input_file, filter, outdir, preprocessed_input):
                 test_set_frbc["panel_detail"] = y_test
                 
                 X_train, y_train, X_test, y_test, cont = set_split(df_train, df_test, seeds[run], n_split)
-
+                
+                df_spox = preprocess_spox(
+                    test_file,
+                    filter,
+                    antibody=antibody,
+                    sero_th=sero_status,
+                    data_column=data_col,
+                    exclude_features=exclude_cols,
+                    preprocessed=preprocessed_input
+                )
+                                
+                print('new spox\n', df_spox)
+                
                 df_name_with_panel = (
                     f"train_{df_train.columns.name }_test_{df_test.columns.name }_{df_name}"
                 )
@@ -449,7 +608,8 @@ def main(input_file, filter, outdir, preprocessed_input):
                 train_sets_frbc = (train_set_frbc, test_set_frbc)
                 
                 #create file with spox data for frbc and lda_frbc
-                spox_frbc = df_spox.iloc[:, 1:]
+                #spox_frbc = df_spox.iloc[:, 1:]
+                spox_frbc = df_spox
                 process_for_skmoefs(
                     spox_frbc,
                     train_set_frbc, #new parameter for normalization
@@ -462,7 +622,7 @@ def main(input_file, filter, outdir, preprocessed_input):
                 # Test if number of classes at least 3
 
                 if len(y_train.unique()) > 2:
-                    accuracy[idx_panel][0][run], precision[idx_panel][0][run], recall[idx_panel][0][run], f1[idx_panel][0][run], y_pred_lda_test, y_pred_lda_train = LDA(
+                    accuracy[idx_panel][0][run], precision[idx_panel][0][run], recall[idx_panel][0][run], f1[idx_panel][0][run], accuracy_spox[idx_panel][0][run], precision_spox[idx_panel][0][run], recall_spox[idx_panel][0][run], f1_spox[idx_panel][0][run], y_pred_lda_test, y_pred_lda_train = LDA(
                         train_sets,
                         df_spox,
                         seeds[run],
@@ -486,7 +646,7 @@ def main(input_file, filter, outdir, preprocessed_input):
                 # train_sets = (X_train, y_train, X_test, y_test) 
 
                 if len(y_train.unique()) > 2:
-                    accuracy[idx_panel][1][run], precision[idx_panel][1][run], recall[idx_panel][1][run], f1[idx_panel][1][run], y_pred_lda_test, y_pred_lda_train = LDA(
+                    accuracy[idx_panel][1][run], precision[idx_panel][1][run], recall[idx_panel][1][run], f1[idx_panel][1][run], accuracy_spox[idx_panel][1][run], precision_spox[idx_panel][1][run], recall_spox[idx_panel][1][run], f1_spox[idx_panel][1][run], y_pred_lda_test, y_pred_lda_train = LDA(
                         train_sets,
                         df_spox,
                         seeds[run],
@@ -506,7 +666,7 @@ def main(input_file, filter, outdir, preprocessed_input):
                         False,
                         norm=True
                     )
-                accuracy[idx_panel][2][run], precision[idx_panel][2][run], recall[idx_panel][2][run], f1[idx_panel][2][run], y_pred_rf_test, y_pred_rf_train = RF(
+                accuracy[idx_panel][2][run], precision[idx_panel][2][run], recall[idx_panel][2][run], f1[idx_panel][2][run], accuracy_spox[idx_panel][2][run], precision_spox[idx_panel][2][run], recall_spox[idx_panel][2][run], f1_spox[idx_panel][2][run], y_pred_rf_test, y_pred_rf_train = RF(
                     1000,
                     5,
                     train_sets,
@@ -525,7 +685,7 @@ def main(input_file, filter, outdir, preprocessed_input):
                     False,
                     norm=True
                 )
-                accuracy[idx_panel][3][run], precision[idx_panel][3][run], recall[idx_panel][3][run], f1[idx_panel][3][run], y_pred_rf_test, y_pred_rf_train = XGBoost(
+                accuracy[idx_panel][3][run], precision[idx_panel][3][run], recall[idx_panel][3][run], f1[idx_panel][3][run], accuracy_spox[idx_panel][3][run], precision_spox[idx_panel][3][run], recall_spox[idx_panel][3][run], f1_spox[idx_panel][3][run], y_pred_rf_test, y_pred_rf_train = XGBoost(
                     1000,
                     5,
                     train_sets,
@@ -545,7 +705,7 @@ def main(input_file, filter, outdir, preprocessed_input):
                     norm=True
                 )
                 if len(y_train.unique()) > 2:
-                    accuracy[idx_panel][4][run], precision[idx_panel][4][run], recall[idx_panel][4][run], f1[idx_panel][4][run] = LDA_RF(
+                    accuracy[idx_panel][4][run], precision[idx_panel][4][run], recall[idx_panel][4][run], f1[idx_panel][4][run], accuracy_spox[idx_panel][4][run], precision_spox[idx_panel][4][run], recall_spox[idx_panel][4][run], f1_spox[idx_panel][4][run] = LDA_RF(
                         1000,
                         5,
                         train_sets,
@@ -565,7 +725,7 @@ def main(input_file, filter, outdir, preprocessed_input):
                         norm=True
                     )
                 if preprocessed_input == False:
-                    accuracy[idx_panel][5][run], precision[idx_panel][5][run], recall[idx_panel][5][run], f1[idx_panel][5][run] = FRBC(
+                    accuracy[idx_panel][5][run], precision[idx_panel][5][run], recall[idx_panel][5][run], f1[idx_panel][5][run], accuracy_spox[idx_panel][5][run], precision_spox[idx_panel][5][run], recall_spox[idx_panel][5][run], f1_spox[idx_panel][5][run] = FRBC(
                         str(df_name_with_panel)+"-TRAIN",
                         str(df_name_with_panel)+"-TEST",
                         str(df_name_with_panel)+"-SPOX",
@@ -587,7 +747,7 @@ def main(input_file, filter, outdir, preprocessed_input):
                         0.5,
                         True
                     )
-                    accuracy[idx_panel][6][run], precision[idx_panel][6][run], recall[idx_panel][6][run], f1[idx_panel][6][run] = FRBC(
+                    accuracy[idx_panel][6][run], precision[idx_panel][6][run], recall[idx_panel][6][run], f1[idx_panel][6][run], accuracy_spox[idx_panel][6][run], precision_spox[idx_panel][6][run], recall_spox[idx_panel][6][run], f1_spox[idx_panel][6][run] = FRBC(
                         str(df_name_with_panel)+"-TRAIN",
                         str(df_name_with_panel)+"-TEST",
                         str(df_name_with_panel)+"-SPOX",
@@ -610,7 +770,7 @@ def main(input_file, filter, outdir, preprocessed_input):
                         False
                     )
                     if len(y_train.unique()) > 2:
-                        accuracy[idx_panel][7][run], precision[idx_panel][7][run], recall[idx_panel][7][run], f1[idx_panel][7][run] = LDA_FRBC(
+                        accuracy[idx_panel][7][run], precision[idx_panel][7][run], recall[idx_panel][7][run], f1[idx_panel][7][run], accuracy_spox[idx_panel][7][run], precision_spox[idx_panel][7][run], recall_spox[idx_panel][7][run], f1_spox[idx_panel][7][run] = LDA_FRBC(
                             str(df_name_with_panel)+"-TRAIN",
                             str(df_name_with_panel)+"-TEST",
                             str(df_name_with_panel)+"-SPOX",
@@ -629,7 +789,35 @@ def main(input_file, filter, outdir, preprocessed_input):
                             unknown_pred_folder,
                             min(2, len(df_train["panel_detail"].unique()) - 1),
                             df_name_with_panel,
-                        ) 
+                        )
+                df_spox = preprocess_spox(
+                    test_file,
+                    filter,
+                    antibody=antibody,
+                    sero_th=sero_status,
+                    data_column=data_col,
+                    exclude_features=exclude_cols,
+                    preprocessed=preprocessed_input
+                )
+                accuracy[idx_panel][8][run], precision[idx_panel][8][run], recall[idx_panel][8][run], f1[idx_panel][8][run], accuracy_spox[idx_panel][8][run], precision_spox[idx_panel][8][run], recall_spox[idx_panel][8][run], f1_spox[idx_panel][8][run], y_pred_rf_test, y_pred_rf_train = deeptables(
+                    1000,
+                    5,
+                    train_sets,
+                    df_spox,
+                    seeds[run],
+                    run,
+                    "deeptables",
+                    feature_folder,
+                    metrics_folder,
+                    cm_folder,
+                    mis_folder,
+                    classified_folder,
+                    unknown_pred_folder,
+                    df_name_with_panel,
+                    None,
+                    False,
+                    norm=True
+                )         
                               
         panel_l = [p for p in itertools.product([df_all, df_acute, df_epi], repeat=2)]
         for panel_idx, (df_train, df_test) in enumerate(panel_l):
@@ -637,8 +825,10 @@ def main(input_file, filter, outdir, preprocessed_input):
             save_statistical_report(
                 accuracy[panel_idx], precision[panel_idx], recall[panel_idx], f1[panel_idx], df_name_with_panel, stat_folder
             )
+            save_statistical_report(
+                accuracy_spox[panel_idx], precision_spox[panel_idx], recall_spox[panel_idx], f1_spox[panel_idx], df_name_with_panel, stat_folder_spox
+            )          
         
-
 
 if __name__ == "__main__":
     main()

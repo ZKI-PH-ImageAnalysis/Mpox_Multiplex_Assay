@@ -7,4 +7,4 @@
 #SBATCH --gres=local:30
 
 
-python main.py --input-file ../dataInputAll.csv --outdir ../Mpox-analysis-2024-02-06
+python main.py --input-file ../dataInputAll.csv --outdir ../Mpox-analysis-2024-11-18
