@@ -628,7 +628,7 @@ def main(input_file, test_file, filter, outdir, preprocessed_input):
                 
                 #create file with spox data for frbc and lda_frbc
                 #spox_frbc = df_spox.iloc[:, 1:]
-                spox_frbc = df_spox
+                spox_frbc = df_spox.copy()
                 process_for_skmoefs(
                     spox_frbc,
                     train_set_frbc, #new parameter for normalization
@@ -639,7 +639,7 @@ def main(input_file, test_file, filter, outdir, preprocessed_input):
                 spox_set_frbc = spox_frbc
 
                 # Test if number of classes at least 3
-
+                
                 if len(y_train.unique()) > 2:
                     accuracy[idx_panel][0][run], precision[idx_panel][0][run], recall[idx_panel][0][run], f1[idx_panel][0][run], accuracy_spox[idx_panel][0][run], precision_spox[idx_panel][0][run], recall_spox[idx_panel][0][run], f1_spox[idx_panel][0][run], y_pred_lda_test, y_pred_lda_train = LDA(
                         train_sets,
@@ -663,7 +663,7 @@ def main(input_file, test_file, filter, outdir, preprocessed_input):
                     )
                 # X_test = X_test.iloc[:, :-1]
                 # train_sets = (X_train, y_train, X_test, y_test) 
-
+                
                 if len(y_train.unique()) > 2:
                     accuracy[idx_panel][1][run], precision[idx_panel][1][run], recall[idx_panel][1][run], f1[idx_panel][1][run], accuracy_spox[idx_panel][1][run], precision_spox[idx_panel][1][run], recall_spox[idx_panel][1][run], f1_spox[idx_panel][1][run], y_pred_lda_test, y_pred_lda_train = LDA(
                         train_sets,
@@ -743,6 +743,7 @@ def main(input_file, test_file, filter, outdir, preprocessed_input):
                         False,
                         norm=True
                     )
+                
                 if preprocessed_input == False:
                     accuracy[idx_panel][5][run], precision[idx_panel][5][run], recall[idx_panel][5][run], f1[idx_panel][5][run], accuracy_spox[idx_panel][5][run], precision_spox[idx_panel][5][run], recall_spox[idx_panel][5][run], f1_spox[idx_panel][5][run] = FRBC(
                         str(df_name_with_panel)+"-TRAIN",
@@ -788,6 +789,7 @@ def main(input_file, test_file, filter, outdir, preprocessed_input):
                         None,
                         False
                     )
+                    
                     if len(y_train.unique()) > 2:
                         accuracy[idx_panel][7][run], precision[idx_panel][7][run], recall[idx_panel][7][run], f1[idx_panel][7][run], accuracy_spox[idx_panel][7][run], precision_spox[idx_panel][7][run], recall_spox[idx_panel][7][run], f1_spox[idx_panel][7][run] = LDA_FRBC(
                             str(df_name_with_panel)+"-TRAIN",
