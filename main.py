@@ -254,6 +254,12 @@ def preprocess_spox(
     df_out["panel_detail"] = df_out["panel"]
 
     df_all = df_out.drop(["serostatus_cat.delta", "serostatus_delta_IgG", "panel"], axis=1)
+
+    # ORDERING!
+    columns_to_keep = ['panel_detail']
+    other_columns = [col for col in df_all.columns if col != 'panel_detail']
+    columns_order = columns_to_keep + sorted(other_columns)
+    df_all = df_all[columns_order]
     
     return df_all
 
@@ -383,14 +389,6 @@ def preprocess_data(
             exclude_features,
             preprocessed
         )
-    # Specify columns to retain at the front
-    columns_to_keep = ['panel_detail']
-    # Get all other columns (excluding 'panel')
-    other_columns = [col for col in df_spox.columns if col != 'panel_detail']
-    # Order all columns alphabetically, starting with 'panel'
-    columns_order = columns_to_keep + sorted(other_columns)
-    # Reorder the DataFrame
-    df_spox = df_spox[columns_order]
     
     # Replace Pre_New samples with Pre
     df_out.loc[df_out.panel_detail == "Pre_New", 'panel_detail'] = "Pre"
