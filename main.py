@@ -598,6 +598,8 @@ def main(input_file, test_file, filter, outdir, preprocessed_input):
                 print('df name', df_train.name)
                 X_train, y_train, X_test, y_test, cont = set_split(df_train, df_test, seeds[run], n_split)
                      
+                
+
                 if cont == True:
                     continue
         
@@ -608,7 +610,7 @@ def main(input_file, test_file, filter, outdir, preprocessed_input):
                 
                 X_train, y_train, X_test, y_test, cont = set_split(df_train, df_test, seeds[run], n_split)
                 
-                df_spox = preprocess_spox(
+                """df_spox = preprocess_spox(
                     test_file,
                     filter,
                     antibody=antibody,
@@ -616,9 +618,8 @@ def main(input_file, test_file, filter, outdir, preprocessed_input):
                     data_column=data_col,
                     exclude_features=exclude_cols,
                     preprocessed=preprocessed_input
-                )
-                                
-                print('new spox\n', df_spox)
+                )               
+                print('new spox\n', df_spox)"""
                 
                 df_name_with_panel = (
                     f"train_{df_train.columns.name }_test_{df_test.columns.name }_{df_name}"
