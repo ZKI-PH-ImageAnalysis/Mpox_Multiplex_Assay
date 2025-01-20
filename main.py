@@ -823,7 +823,7 @@ def main(input_file, test_file, filter, outdir, preprocessed_input):
                             min(2, len(df_train["panel_detail"].unique()) - 1),
                             df_name_with_panel,
                         )
-                df_spox = preprocess_spox(
+                """df_spox = preprocess_spox(
                     test_file,
                     filter,
                     antibody=antibody,
@@ -831,7 +831,7 @@ def main(input_file, test_file, filter, outdir, preprocessed_input):
                     data_column=data_col,
                     exclude_features=exclude_cols,
                     preprocessed=preprocessed_input
-                )
+                )"""
                 accuracy[idx_panel][8][run], precision[idx_panel][8][run], recall[idx_panel][8][run], f1[idx_panel][8][run], accuracy_spox[idx_panel][8][run], precision_spox[idx_panel][8][run], recall_spox[idx_panel][8][run], f1_spox[idx_panel][8][run], y_pred_rf_test, y_pred_rf_train = deeptables(
                     1000,
                     5,
