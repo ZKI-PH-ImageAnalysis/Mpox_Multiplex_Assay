@@ -852,11 +852,6 @@ def FRBC(
     nEvals = params[2]
     capacity = params[3]
     divisions = params[4]
-
-    accuracy_spox = 0
-    precision_spox = 0
-    recall_spox = 0
-    f1_spox = 0
     
     algs = ["moead", "nsga3", "spea2", "mpaes22"]
 
@@ -907,6 +902,7 @@ def FRBC(
     conf_degrees_spox = classifier.conf_degree(X_spox)
     conf_degrees_test = classifier.conf_degree(X_test)
     conf_degrees_train = classifier.conf_degree(X_train)
+    
     if threshold_use == True:
         conf_y_real, conf_y_pred = threshold_usage(classifier, X_test, y_test, y_test_pred, conf_degrees_test, threshold_value)
         conf_y_real_spox, conf_y_pred_spox = threshold_usage(classifier, X_spox, y_spox, y_spox_pred, conf_degrees_spox, threshold_value)
@@ -916,6 +912,55 @@ def FRBC(
     
     replace_panel(test)
     replace_panel(spox)
+	
+    save_classified_general(
+        train.iloc[:, :-1], 
+        test.iloc[:, :-1], 
+        train.iloc[:, -1], 
+        y_train_pred, 
+        test.iloc[:, -1], 
+        y_test_pred, 
+        output_name, 
+        str(classifier_name), 
+        class_folder, 
+        run, 
+        conf_degrees_train, 
+        conf_degrees_test, 
+        threshold_use
+    )
+	
+    directory = str(classifier_name) + '_revised_data'
+    parent_dir = os.path.join(class_folder, directory)
+    if os.path.exists(parent_dir + "/") == False:
+        os.makedirs(parent_dir)
+    
+    path = (
+        parent_dir
+        + "/"
+        + str(output_name)
+        + "_"
+        + str(run)
+        + ".csv"
+    )
+    
+    df = spox.iloc[:, :-1].copy(deep=True)
+    df["real"] = spox.iloc[:, -1]
+    df["pred"] = y_spox_pred
+    df.to_csv(path)
+    
+    del df
+    gc.collect()
+    
+    directory = str(classifier_name)
+    new_dir = os.path.join(rule_folder, directory)
+    
+    if os.path.exists(new_dir + "/") == False:
+        os.mkdir(new_dir)
+    path = new_dir + "/" + str(output_name) + "_" + str(run) + ".txt"
+    
+    file_ = open(path, "a")
+    classifier.show_RB(inputs, outputs, f=file_)
+    file_.close()
     
     if threshold_use == True and len(conf_y_real) > 0 and len(conf_y_pred) > 0:
         test["conf_degree"] = conf_degrees_test
@@ -934,7 +979,7 @@ def FRBC(
         precision = precision_score(conf_y_real, conf_y_pred, average="macro")
         recall = recall_score(conf_y_real, conf_y_pred, average="macro")
         f1 = f1_score(conf_y_real, conf_y_pred, average="macro")
-
+        
         save_metrics(
             conf_y_real,
             conf_y_pred,
@@ -949,6 +994,10 @@ def FRBC(
         )
     
         save_confusion_matrix(conf_y_real, conf_y_pred, output_name, str(classifier_name), cm_folder, run, classifier=None)
+		
+        save_misclassified_data(
+                new_test, conf_y_real, conf_y_pred, output_name, str(classifier_name), mis_folder, run, threshold_value, threshold_use
+            )
         
         if len(conf_y_real_spox) > 0 and len(conf_y_pred_spox) > 0:
             spox["conf_degree"] = conf_degrees_spox
@@ -1043,31 +1092,9 @@ def FRBC(
             plt.grid(False)
             plt.savefig(path)
             plt.close()
-            
-        save_misclassified_data(
-            new_test, conf_y_real, conf_y_pred, output_name, str(classifier_name), mis_folder, run, threshold_value, threshold_use
-        )
+			
+            return accuracy, precision, recall, f1, accuracy_spox, precision_spox, recall_spox, f1_spox
         
-        accuracy = accuracy_score(conf_y_real, conf_y_pred)
-        precision = precision_score(conf_y_real, conf_y_pred, average="macro")
-        recall = recall_score(conf_y_real, conf_y_pred, average="macro")
-        f1 = f1_score(conf_y_real, conf_y_pred, average="macro")
-
-        save_metrics(
-            conf_y_real,
-            conf_y_pred,
-            accuracy,
-            precision,
-            recall,
-            f1,
-            output_name,
-            str(classifier_name),
-            metrics_folder,
-            run,
-        )
-    
-        save_confusion_matrix(conf_y_real, conf_y_pred, output_name, str(classifier_name), cm_folder, run, classifier=None)
-            
     else:    
         save_misclassified_data(
             test.iloc[:, :-1], test.iloc[:, -1], y_test_pred, output_name, str(classifier_name), mis_folder, run, threshold_value, threshold_use
@@ -1183,46 +1210,7 @@ def FRBC(
         plt.savefig(path)
         plt.close()
         
-    save_classified_general(
-        train.iloc[:, :-1], test.iloc[:, :-1], train.iloc[:, -1], y_train_pred, test.iloc[:, -1], y_test_pred, output_name, str(classifier_name), class_folder, run, conf_degrees_train, conf_degrees_test, threshold_use
-    )
-    
-    directory = str(classifier_name) + '_revised_data'
-    parent_dir = os.path.join(class_folder, directory)
-    if os.path.exists(parent_dir + "/") == False:
-        os.makedirs(parent_dir)
-    
-    path = (
-        parent_dir
-        + "/"
-        + str(output_name)
-        + "_"
-        + str(run)
-        + ".csv"
-    )
-    
-    df = spox.iloc[:, :-1].copy(deep=True)
-    df["real"] = spox.iloc[:, -1]
-    df["pred"] = y_spox_pred
-    df.to_csv(path)
-    
-    del df
-    gc.collect()
-        
-    #save_unknown_preds(spox_out, unknown_pred_folder, str(classifier_name), run, output_name) #save results for spox data
-
-    directory = str(classifier_name)
-    new_dir = os.path.join(rule_folder, directory)
-    
-    if os.path.exists(new_dir + "/") == False:
-        os.mkdir(new_dir)
-    path = new_dir + "/" + str(output_name) + "_" + str(run) + ".txt"
-
-    file_ = open(path, "a")
-    classifier.show_RB(inputs, outputs, f=file_)
-    file_.close()
-
-    return accuracy, precision, recall, f1, accuracy_spox, precision_spox, recall_spox, f1_spox
+        return accuracy, precision, recall, f1, accuracy_spox, precision_spox, recall_spox, f1_spox
 
 
 def LDA_FRBC(
