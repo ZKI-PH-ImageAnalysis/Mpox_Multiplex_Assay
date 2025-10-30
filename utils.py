@@ -535,14 +535,65 @@ def save_lda_plot(X_train, y_train, X_test, y_test_pred, lda, outdir, output_nam
     plt.close()
 
 
-def export_feature_importance(X_train, y_train, X_test, y_test, classifier, outdir, output_name, run):
-    # Ensure the output directory exists
+def export_feature_importance(X_train, y_train, X_test, y_test,
+                              classifier, outdir, output_name, run):
+    """
+    Computes & exports:
+      - TRAIN set: impurity (MDI) + permutation (mean, std, per-repeat)
+      - TEST set:  permutation (mean, std, per-repeat)
+    Writes CSVs and PNG plots.
+    """
     os.makedirs(outdir, exist_ok=True)
 
-    # Define common style for publication
+    # ------- TRAIN importances -------
+    result_train = permutation_importance(
+        classifier, X_train, y_train,
+        n_repeats=10, random_state=42, n_jobs=2
+    )
+    mdi_vals = classifier.feature_importances_
+    n_repeats = result_train.importances.shape[1]
+
+    # Build train‐importance DataFrame
+    imp_train_df = pd.DataFrame({
+        "feature":        X_train.columns,
+        "mdi_importance": mdi_vals,
+        "perm_mean":      result_train.importances_mean,
+        "perm_std":       result_train.importances_std,
+        **{
+            f"perm_repeat_{j}": result_train.importances[:, j]
+            for j in range(n_repeats)
+        }
+    })
+    csv_train = os.path.join(
+        outdir,
+        f"{output_name}_{run}_{classifier.__class__.__name__}_IMPORTANCES_TRAIN.csv"
+    )
+    imp_train_df.to_csv(csv_train, index=False)
+
+    # ------- TEST importances -------
+    result_test = permutation_importance(
+        classifier, X_test, y_test,
+        n_repeats=n_repeats, random_state=42, n_jobs=2
+    )
+    imp_test_df = pd.DataFrame({
+        "feature":           X_test.columns,
+        "perm_mean_test":    result_test.importances_mean,
+        "perm_std_test":     result_test.importances_std,
+        **{
+            f"perm_repeat_{j}": result_test.importances[:, j]
+            for j in range(n_repeats)
+        }
+    })
+    csv_test = os.path.join(
+        outdir,
+        f"{output_name}_{run}_{classifier.__class__.__name__}_IMPORTANCES_TEST.csv"
+    )
+    imp_test_df.to_csv(csv_test, index=False)
+
+    # ------- Plotting (unchanged) -------
     plt.style.use('seaborn-v0_8-paper')
     plt.rcParams.update({
-        'font.size': 14,  # Increase font size
+        'font.size': 14,
         'axes.titlesize': 16,
         'axes.labelsize': 14,
         'xtick.labelsize': 14,
@@ -550,54 +601,48 @@ def export_feature_importance(X_train, y_train, X_test, y_test, classifier, outd
         'legend.fontsize': 14
     })
 
-    # Plot training set feature importances
+    # TRAIN plots
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 8))
-
-    # Permutation importance (training set)
-    result_train = permutation_importance(
-        classifier, X_train, y_train, n_repeats=10, random_state=42, n_jobs=2
-    )
-    perm_sorted_idx_train = result_train.importances_mean.argsort()
+    idx_sort = result_train.importances_mean.argsort()
     ax1.boxplot(
-        result_train.importances[perm_sorted_idx_train].T,
+        result_train.importances[idx_sort].T,
         vert=False,
-        labels=X_train.columns[perm_sorted_idx_train],
+        labels=X_train.columns[idx_sort],
     )
-    ax1.axvline(x=0, color="k", linestyle="--")
+    ax1.axvline(0, color="k", linestyle="--")
     ax1.set_xlabel("Decrease in accuracy score")
     ax1.set_title("Permutation Importances (Training Set)")
 
-    # Impurity-based importance (training set)
-    mdi_importances = pd.Series(classifier.feature_importances_, index=X_train.columns)
-    mdi_importances.sort_values().plot.barh(ax=ax2, color='teal')
+    mdi_series = pd.Series(mdi_vals, index=X_train.columns).sort_values()
+    mdi_series.plot.barh(ax=ax2)
     ax2.set_xlabel("Gini Importance")
     ax2.set_title("Impurity-Based Importances (Training Set)")
 
     fig.suptitle("Feature Importances on Training Set", fontsize=18)
     fig.tight_layout()
-    out_path_train = os.path.join(outdir, f"{output_name}_{run}_{classifier.__class__.__name__}_TRAIN.png")
-    fig.savefig(out_path_train, dpi=1200, bbox_inches='tight')
+    fig.savefig(
+        os.path.join(outdir, f"{output_name}_{run}_{classifier.__class__.__name__}_TRAIN.png"),
+        dpi=1200, bbox_inches='tight'
+    )
     plt.close(fig)
 
-    # Plot test set feature importances
+    # TEST plot
     fig, ax = plt.subplots(figsize=(10, 8))
-
-    result_test = permutation_importance(
-        classifier, X_test, y_test, n_repeats=10, random_state=42, n_jobs=2
-    )
-    perm_sorted_idx_test = result_test.importances_mean.argsort()
+    idx_sort_t = result_test.importances_mean.argsort()
     ax.boxplot(
-        result_test.importances[perm_sorted_idx_test].T,
+        result_test.importances[idx_sort_t].T,
         vert=False,
-        labels=X_test.columns[perm_sorted_idx_test],
+        labels=X_test.columns[idx_sort_t],
     )
-    ax.axvline(x=0, color="k", linestyle="--")
-    ax.set_title("Permutation Importances (Test Set)", fontsize=16)
+    ax.axvline(0, color="k", linestyle="--")
+    ax.set_ylabel("Feature")
     ax.set_xlabel("Decrease in accuracy score")
-
+    ax.set_title("Permutation Importances (Test Set)")
     fig.tight_layout()
-    out_path_test = os.path.join(outdir, f"{output_name}_{run}_{classifier.__class__.__name__}_TEST.png")
-    fig.savefig(out_path_test, dpi=1200, bbox_inches='tight')
+    fig.savefig(
+        os.path.join(outdir, f"{output_name}_{run}_{classifier.__class__.__name__}_TEST.png"),
+        dpi=1200, bbox_inches='tight'
+    )
     plt.close(fig)
 
 
