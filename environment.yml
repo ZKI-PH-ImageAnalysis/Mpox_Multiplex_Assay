@@ -345,3 +345,5 @@ dependencies:
   - pip:
       - seaborn==0.12.2
       - xxhash==3.3.0
+      - deeptables
+      - tensorflow

@@ -9,7 +9,7 @@ columns = [
 ]
 
 # Define the number of rows
-num_rows = 200
+num_rows = 1000
 
 # Set a seed for reproducibility
 np.random.seed(385)
