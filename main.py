@@ -210,7 +210,37 @@ def preprocess_spox(
         These will be excluded from further analysis."
     )
     # Drop NaN
-    df_in = df_in[df_in["panel"].notna()]
+    # Detect NaN values and their locations
+    nan_info = df_in.isna()
+    nan_count = nan_info.sum().sum()
+    nan_columns = df_in.columns[nan_info.any()].tolist()
+    nan_rows = df_in[nan_info.any(axis=1)].index.tolist()
+
+    print(f"Total NaN values: {nan_count}")
+    print(f"Columns containing NaNs: {nan_columns}")
+    print(f"Rows containing NaNs: {nan_rows}")
+
+    # Print sampleID_meta column of NaN rows
+    print("SampleID_meta of NaN rows:")
+    print(df_in.loc[nan_rows, "sampleID_meta"])
+
+    # Print which exact columns have NaN values for each NaN row
+    print("Columns with NaN values per NaN row:")
+    for row in nan_rows:
+        missing_cols = df_in.columns[df_in.loc[row].isna()].tolist()
+        print(f"Row {row} (sampleID_meta: {df_in.loc[row, 'sampleID_meta']}): {missing_cols}")
+
+    # Print dataframe before dropping NaNs
+    print("DataFrame before removing NaNs:")
+    print(df_in)
+
+    # Drop all rows with any NaN value
+    df_in = df_in.dropna()
+
+    # Print dataframe after dropping NaNs
+    print("DataFrame after removing NaNs:")
+    print(df_in)
+
     #df_in = df_in[df_in["dataIn_D8L"].notna()]
 
     # Group by patient ID so that we have analytes as columns
@@ -271,6 +301,7 @@ def preprocess_data(
     data_column="data",
     exclude_features=("None"),
     preprocessed=False,
+    antigen_to_remove = ""
 ):
     """
     Antibody: "IgG", "IgM", "IgM_IgG"
@@ -409,6 +440,17 @@ def preprocess_data(
     df_acute = df_out[df_out["panel"] != "SPox"].drop(["panel"], axis=1)
     df_epi = df_out[df_out["panel"] == "SPox"].drop(["panel"], axis=1)
 
+    if antigen_to_remove:
+        if isinstance(antigen_to_remove, str):
+            antigens = [antigen_to_remove]
+        else:
+            antigens = list(antigen_to_remove)
+
+        cols_to_remove = [f"{iso}_{ag}" for iso in ("IgG", "IgM") for ag in antigens]
+        for df in [df_all, df_acute, df_epi, df_spox]:
+            df.drop(columns=[col for col in cols_to_remove if col in df.columns], inplace=True)
+    
+
 
     print('df_all\n', df_all)
     print('df_spox\n', df_spox)
@@ -501,7 +543,14 @@ def set_split(df_train, df_test, seed, n_split=5):
     help = "Bool value if inputfile csv is already preprocessed",
     default = False,
 )
-def main(input_file, test_file, filter, outdir, preprocessed_input):
+@click.option(
+    "--antigen-to-remove",
+    type=str,
+    multiple=True,
+    help = "Bool value if inputfile csv is already preprocessed",
+    default = [],
+)
+def main(input_file, test_file, filter, outdir, preprocessed_input, antigen_to_remove):
     df_assay = pd.read_csv(input_file, low_memory=False)
 
     d = {}
@@ -517,6 +566,7 @@ def main(input_file, test_file, filter, outdir, preprocessed_input):
             data_column=data_col,
             exclude_features=exclude_cols,
             preprocessed=preprocessed_input,
+            antigen_to_remove=antigen_to_remove,
         )
         # just for readability when saving files
         exclude_cols = "".join(exclude_cols)
@@ -640,7 +690,7 @@ def main(input_file, test_file, filter, outdir, preprocessed_input):
 
                 # Test if number of classes at least 3
                 
-                if len(y_train.unique()) > 2:
+                """if len(y_train.unique()) > 2:
                     accuracy[idx_panel][0][run], precision[idx_panel][0][run], recall[idx_panel][0][run], f1[idx_panel][0][run], accuracy_spox[idx_panel][0][run], precision_spox[idx_panel][0][run], recall_spox[idx_panel][0][run], f1_spox[idx_panel][0][run], y_pred_lda_test, y_pred_lda_train = LDA(
                         train_sets,
                         df_spox,
@@ -704,6 +754,7 @@ def main(input_file, test_file, filter, outdir, preprocessed_input):
                     False,
                     norm=True
                 )
+                """
                 accuracy[idx_panel][3][run], precision[idx_panel][3][run], recall[idx_panel][3][run], f1[idx_panel][3][run], accuracy_spox[idx_panel][3][run], precision_spox[idx_panel][3][run], recall_spox[idx_panel][3][run], f1_spox[idx_panel][3][run], y_pred_rf_test, y_pred_rf_train = XGBoost(
                     1000,
                     5,
@@ -723,7 +774,8 @@ def main(input_file, test_file, filter, outdir, preprocessed_input):
                     False,
                     norm=True
                 )
-                if len(y_train.unique()) > 2:
+                
+                """if len(y_train.unique()) > 2:
                     accuracy[idx_panel][4][run], precision[idx_panel][4][run], recall[idx_panel][4][run], f1[idx_panel][4][run], accuracy_spox[idx_panel][4][run], precision_spox[idx_panel][4][run], recall_spox[idx_panel][4][run], f1_spox[idx_panel][4][run] = LDA_RF(
                         1000,
                         5,
@@ -742,10 +794,10 @@ def main(input_file, test_file, filter, outdir, preprocessed_input):
                         None,
                         False,
                         norm=True
-                    )
+                    )"""
                 
-                if preprocessed_input == False:
-                    accuracy[idx_panel][5][run], precision[idx_panel][5][run], recall[idx_panel][5][run], f1[idx_panel][5][run], accuracy_spox[idx_panel][5][run], precision_spox[idx_panel][5][run], recall_spox[idx_panel][5][run], f1_spox[idx_panel][5][run] = FRBC(
+                # if preprocessed_input == False:
+                """accuracy[idx_panel][5][run], precision[idx_panel][5][run], recall[idx_panel][5][run], f1[idx_panel][5][run], accuracy_spox[idx_panel][5][run], precision_spox[idx_panel][5][run], recall_spox[idx_panel][5][run], f1_spox[idx_panel][5][run] = FRBC(
                         str(df_name_with_panel)+"-TRAIN",
                         str(df_name_with_panel)+"-TEST",
                         str(df_name_with_panel)+"-SPOX",
@@ -810,8 +862,8 @@ def main(input_file, test_file, filter, outdir, preprocessed_input):
                             unknown_pred_folder,
                             min(2, len(df_train["panel_detail"].unique()) - 1),
                             df_name_with_panel,
-                        )
-                accuracy[idx_panel][8][run], precision[idx_panel][8][run], recall[idx_panel][8][run], f1[idx_panel][8][run], accuracy_spox[idx_panel][8][run], precision_spox[idx_panel][8][run], recall_spox[idx_panel][8][run], f1_spox[idx_panel][8][run], y_pred_rf_test, y_pred_rf_train = deeptables(
+                        )"""
+                """accuracy[idx_panel][8][run], precision[idx_panel][8][run], recall[idx_panel][8][run], f1[idx_panel][8][run], accuracy_spox[idx_panel][8][run], precision_spox[idx_panel][8][run], recall_spox[idx_panel][8][run], f1_spox[idx_panel][8][run], y_pred_rf_test, y_pred_rf_train = deeptables(
                     1000,
                     5,
                     train_sets,
@@ -829,7 +881,7 @@ def main(input_file, test_file, filter, outdir, preprocessed_input):
                     None,
                     False,
                     norm=True
-                )         
+                ) """        
                               
         panel_l = [p for p in itertools.product([df_all, df_acute, df_epi], repeat=2)]
         for panel_idx, (df_train, df_test) in enumerate(panel_l):
