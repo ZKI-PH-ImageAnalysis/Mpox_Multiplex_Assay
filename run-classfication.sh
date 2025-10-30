@@ -6,5 +6,7 @@
 #SBATCH --mem=80GB
 #SBATCH --gres=local:30
 
-
-python main.py --input-file ../dataInputAll.csv --outdir ../Mpox-analysis-2024-11-18
+python main.py --input-file ../dataInputAll.csv \
+ --test-file ../dataPredictionRevisionRep.csv \
+ --outdir  ../2025_06_16-GBC-baseline \
+ --filter ../Samples_Pre_MVA_Positive_SPox_2.csv
