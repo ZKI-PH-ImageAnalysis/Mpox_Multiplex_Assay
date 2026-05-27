@@ -660,33 +660,7 @@ def main(input_file, test_file, filter, outdir, preprocessed_input, antigen_to_r
                 )
                 train_sets = (X_train, y_train, X_test, y_test)
 
-                process_for_skmoefs(
-                    test_set_frbc,
-                    train_set_frbc, #new parameter for normalization
-                    False,
-                    out=f"skmoefs/dataset/{df_name_with_panel}-TEST.dat",
-                    panel_name=f"{df_name_with_panel}",
-                )
-                process_for_skmoefs(
-                    train_set_frbc,
-                    train_set_frbc, #new parameter for normalization
-                    False,
-                    out=f"skmoefs/dataset/{df_name_with_panel}-TRAIN.dat",
-                    panel_name=f"{df_name_with_panel}",
-                )
-                train_sets_frbc = (train_set_frbc, test_set_frbc)
-                
-                #create file with spox data for frbc and lda_frbc
-                #spox_frbc = df_spox.iloc[:, 1:]
-                spox_frbc = df_spox.copy()
-                process_for_skmoefs(
-                    spox_frbc,
-                    train_set_frbc, #new parameter for normalization
-                    True,
-                    out=f"skmoefs/dataset/{df_name_with_panel}-SPOX.dat",
-                    panel_name=f"{df_name_with_panel}",
-                )
-                spox_set_frbc = spox_frbc
+            
 
                 # Test if number of classes at least 3
                 
@@ -863,14 +837,14 @@ def main(input_file, test_file, filter, outdir, preprocessed_input, antigen_to_r
                             min(2, len(df_train["panel_detail"].unique()) - 1),
                             df_name_with_panel,
                         )"""
-                """accuracy[idx_panel][8][run], precision[idx_panel][8][run], recall[idx_panel][8][run], f1[idx_panel][8][run], accuracy_spox[idx_panel][8][run], precision_spox[idx_panel][8][run], recall_spox[idx_panel][8][run], f1_spox[idx_panel][8][run], y_pred_rf_test, y_pred_rf_train = deeptables(
+                accuracy[idx_panel][8][run], precision[idx_panel][8][run], recall[idx_panel][8][run], f1[idx_panel][8][run], accuracy_spox[idx_panel][8][run], precision_spox[idx_panel][8][run], recall_spox[idx_panel][8][run], f1_spox[idx_panel][8][run], y_pred_rf_test, y_pred_rf_train = TabPFN(
                     1000,
                     5,
                     train_sets,
                     df_spox,
                     seeds[run],
                     run,
-                    "deeptables",
+                    "tabpfn",
                     feature_folder,
                     metrics_folder,
                     cm_folder,
@@ -881,7 +855,7 @@ def main(input_file, test_file, filter, outdir, preprocessed_input, antigen_to_r
                     None,
                     False,
                     norm=True
-                ) """        
+                )        
                               
         panel_l = [p for p in itertools.product([df_all, df_acute, df_epi], repeat=2)]
         for panel_idx, (df_train, df_test) in enumerate(panel_l):

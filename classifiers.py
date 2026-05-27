@@ -6,14 +6,9 @@ import os.path
 import warnings
 
 import numpy as np
-import tensorflow as tf
 import matplotlib.pyplot as plt
 
 from utils import *
-
-from platypus.algorithms import *
-
-from deeptables.models import deeptable
 
 from sklearn.inspection import permutation_importance
 
@@ -24,14 +19,6 @@ from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_sc
 from sklearn.metrics import (
     accuracy_score,
     classification_report,
-)
-
-from skmoefs.rcs import RCSInitializer, RCSVariator
-from skmoefs.discretization.discretizer_base import fuzzyDiscretization
-from skmoefs.toolbox import (
-    MPAES_RCS,
-    load_dataset,
-    normalize,
 )
 
 warnings.filterwarnings("ignore")
@@ -562,9 +549,11 @@ def RF(
         + ".png"
     )
     
-    cm = confusion_matrix(y_spox, y_spox_pred)
-    cm = confusion_matrix(y_spox, y_spox_pred, labels=rf.classes_)
-    disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=rf.classes_)
+    cm_labels = getattr(rf, "classes_", None)
+    if cm_labels is None:
+        cm_labels = sorted(set(list(y_spox) + list(y_spox_pred)))
+    cm = confusion_matrix(y_spox, y_spox_pred, labels=cm_labels)
+    disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=cm_labels)
     disp = disp.plot(
         include_values=True, cmap="viridis", ax=None, xticks_rotation="horizontal"
     )
@@ -754,9 +743,11 @@ def LDA_RF(
         + ".png"
     )
     
-    cm = confusion_matrix(y_spox, y_spox_pred)
-    cm = confusion_matrix(y_spox, y_spox_pred, labels=rf.classes_)
-    disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=rf.classes_)
+    cm_labels = getattr(rf, "classes_", None)
+    if cm_labels is None:
+        cm_labels = sorted(set(list(y_spox) + list(y_spox_pred)))
+    cm = confusion_matrix(y_spox, y_spox_pred, labels=cm_labels)
+    disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=cm_labels)
     disp = disp.plot(
         include_values=True, cmap="viridis", ax=None, xticks_rotation="horizontal"
     )
@@ -1454,6 +1445,203 @@ def LDA_FRBC(
 
     return accuracy, precision, recall, f1, accuracy_spox, precision_spox, recall_spox, f1_spox
 
+def TabPFN(
+    n_est,
+    depth,
+    train_sets,
+    spox_sets,
+    seed,
+    run,
+    classifier,
+    feature_folder,
+    metrics_folder,
+    cm_folder,
+    mis_folder,
+    class_folder,
+    unknown_pred_folder,
+    output_name,
+    threshold_value, 
+    threshold_use,
+    norm=True
+):
+
+    X_train, y_train, X_test, y_test = train_sets
+    X_train = X_train.copy()
+    y_train = y_train.copy()
+    X_test = X_test.copy()
+    y_test = y_test.copy()
+    X_spox = spox_sets.iloc[:, 1:].copy()
+    y_spox = spox_sets.iloc[:, 0].copy()
+
+    if norm == True:
+        min_max_scaler = preprocessing.MinMaxScaler()
+        X_train[X_train.columns] = min_max_scaler.fit_transform(X_train)
+        X_test[X_test.columns] = min_max_scaler.transform(X_test)
+        X_spox[X_spox.columns] = min_max_scaler.transform(X_spox)
+
+    from tabpfn import TabPFNClassifier
+    from tabpfn_extensions.post_hoc_ensembles.sklearn_interface import AutoTabPFNClassifier
+    from tabpfn.finetuning.finetuned_classifier import (
+        FinetunedTabPFNClassifier,
+    )
+
+    # rf = AutoTabPFNClassifier(device="auto", max_time=7200, balance_probabilities=True).fit(X_train, y_train)
+    rf = FinetunedTabPFNClassifier(device="cuda", epochs=30, learning_rate=1e-5).fit(X_train, y_train)
+
+    y_test_pred = rf.predict(X_test)
+    y_spox_pred = rf.predict(X_spox)
+    y_train_pred = rf.predict(X_train)
+
+    accuracy = accuracy_score(y_test, y_test_pred)
+    precision = precision_score(y_test, y_test_pred, average="macro")
+    recall = recall_score(y_test, y_test_pred, average="macro")
+    f1 = f1_score(y_test, y_test_pred, average="macro")
+    
+    accuracy_spox = accuracy_score(y_spox, y_spox_pred)
+    precision_spox = precision_score(y_spox, y_spox_pred, average="macro")
+    recall_spox = recall_score(y_spox, y_spox_pred, average="macro")
+    f1_spox = f1_score(y_spox, y_spox_pred, average="macro")
+
+    save_metrics(
+        y_test,
+        y_test_pred,
+        accuracy,
+        precision,
+        recall,
+        f1,
+        output_name,
+        str(classifier),
+        metrics_folder,
+        run,
+    )
+    
+    directory = str(classifier) + '_revised_data'
+    parent_dir = os.path.join(metrics_folder, directory)
+    if os.path.exists(parent_dir + "/") == False:
+        os.makedirs(parent_dir)
+    
+    path = (
+        parent_dir
+        + "/"
+        + str(output_name)
+        + "_"
+        + str(run)
+        + ".txt"
+    )
+
+    f = open(path, "w")
+    f.write(classification_report(y_spox, y_spox_pred))
+    f.write("\n")
+
+    f.write("accuracy = ")
+    f.write(str(accuracy_spox))
+    f.write("\n")
+
+    f.write("precision = ")
+    f.write(str(precision_spox))
+    f.write("\n")
+
+    f.write("recall = ")
+    f.write(str(recall_spox))
+    f.write("\n")
+
+    f.write("f1 = ")
+    f.write(str(f1_spox))
+    f.write("\n")
+    f.close()
+
+    save_confusion_matrix(y_test, y_test_pred, output_name, str(classifier), cm_folder, run, classifier=rf)
+    
+    directory = str(classifier) + '_revised_data'
+    parent_dir = os.path.join(cm_folder, directory)
+    if os.path.exists(parent_dir + "/") == False:
+        os.makedirs(parent_dir)
+    
+    path = (
+        parent_dir
+        + "/"
+        + str(output_name)
+        + "_"
+        + str(run)
+        + ".png"
+    )
+    
+    cm_labels = getattr(rf, "classes_", None)
+    if cm_labels is None:
+        cm_labels = sorted(set(list(y_spox) + list(y_spox_pred)))
+    cm = confusion_matrix(y_spox, y_spox_pred, labels=cm_labels)
+    disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=cm_labels)
+    disp = disp.plot(
+        include_values=True, cmap="viridis", ax=None, xticks_rotation="horizontal"
+    )
+    
+    plt.grid(False)
+    plt.savefig(path)
+    plt.close()
+
+    save_misclassified_data(
+        X_test, y_test, y_test_pred, output_name, str(classifier), mis_folder, run, threshold_value, threshold_use
+    )
+    
+    directory = str(classifier) + '_revised_data'
+    parent_dir = os.path.join(mis_folder, directory)
+    if os.path.exists(parent_dir + "/") == False:
+        os.makedirs(parent_dir)
+    
+    path = (
+        parent_dir
+        + "/"
+        + str(output_name)
+        + "_"
+        + str(run)
+        + ".csv"
+    )
+    
+    df = X_spox.copy(deep=True)
+
+    df["real"] = y_spox
+    df["pred"] = y_spox_pred
+
+    df_out = df[df["real"] != df["pred"]]
+    df_out.to_csv(path)
+    
+    del df, df_out
+    gc.collect()
+    
+    save_classified_general(
+            X_train, X_test, y_train, y_train_pred, y_test, y_test_pred, output_name, str(classifier), class_folder, run, None, None, False
+        )
+        
+    directory = str(classifier) + '_revised_data'
+    parent_dir = os.path.join(class_folder, directory)
+    if os.path.exists(parent_dir + "/") == False:
+        os.makedirs(parent_dir)
+    
+    path = (
+        parent_dir
+        + "/"
+        + str(output_name)
+        + "_"
+        + str(run)
+        + ".csv"
+    )
+    
+    df = X_spox.copy(deep=True)
+    df["real"] = y_spox
+    df["pred"] = y_spox_pred
+    df.to_csv(path)
+    
+    del df
+    gc.collect()
+    
+    #save_unknown_preds(spox_out, unknown_pred_folder, str(classifier), run, output_name)
+
+    return accuracy, precision, recall, f1, accuracy_spox, precision_spox, recall_spox, f1_spox, y_test_pred, y_train_pred
+    
+
+
+
+
 def XGBoost(
     n_est,
     depth,
@@ -1645,192 +1833,3 @@ def XGBoost(
     return accuracy, precision, recall, f1, accuracy_spox, precision_spox, recall_spox, f1_spox, y_test_pred, y_train_pred
     
     
-def deeptables(
-    n_est,
-    depth,
-    train_sets,
-    spox_sets,
-    seed,
-    run,
-    classifier,
-    feature_folder,
-    metrics_folder,
-    cm_folder,
-    mis_folder,
-    class_folder,
-    unknown_pred_folder,
-    output_name,
-    threshold_value, 
-    threshold_use,
-    norm=True,
-):
-
-    X_train, y_train, X_test, y_test = train_sets
-    X_train = X_train.copy()
-    y_train = y_train.copy()
-    X_test = X_test.copy()
-    y_test = y_test.copy()
-    X_spox = spox_sets.iloc[:, 1:].copy()
-    y_spox = spox_sets.iloc[:, 0].copy()
-    
-    print('deeptables\n', X_spox)
-
-    if norm == True:
-        min_max_scaler = preprocessing.MinMaxScaler()
-        X_train[X_train.columns] = min_max_scaler.fit_transform(X_train)
-        X_test[X_test.columns] = min_max_scaler.transform(X_test)
-        X_spox[X_spox.columns] = min_max_scaler.transform(X_spox)
-
-    conf = deeptable.ModelConfig(nets=['dnn_nets'], optimizer=tf.keras.optimizers.RMSprop(), earlystopping_patience=10)
-
-    dt = deeptable.DeepTable(config=conf)
-
-    model, history = dt.fit(X_train, y_train, epochs=10)
-
-    y_test_pred = dt.predict(X_test)
-    y_train_pred = dt.predict(X_train)
-    y_spox_pred = dt.predict(X_spox)
-
-    accuracy = accuracy_score(y_test, y_test_pred)
-    precision = precision_score(y_test, y_test_pred, average="macro")
-    recall = recall_score(y_test, y_test_pred, average="macro")
-    f1 = f1_score(y_test, y_test_pred, average="macro")
-    
-    accuracy_spox = accuracy_score(y_spox, y_spox_pred)
-    precision_spox = precision_score(y_spox, y_spox_pred, average="macro")
-    recall_spox = recall_score(y_spox, y_spox_pred, average="macro")
-    f1_spox = f1_score(y_spox, y_spox_pred, average="macro")
-    
-    save_metrics(
-        y_test,
-        y_test_pred,
-        accuracy,
-        precision,
-        recall,
-        f1,
-        output_name,
-        str(classifier),
-        metrics_folder,
-        run,
-    )
-    
-    directory = str(classifier) + '_revised_data'
-    parent_dir = os.path.join(metrics_folder, directory)
-    if os.path.exists(parent_dir + "/") == False:
-        os.makedirs(parent_dir)
-    
-    path = (
-        parent_dir
-        + "/"
-        + str(output_name)
-        + "_"
-        + str(run)
-        + ".txt"
-    )
-
-    f = open(path, "w")
-    f.write(classification_report(y_spox, y_spox_pred))
-    f.write("\n")
-
-    f.write("accuracy = ")
-    f.write(str(accuracy_spox))
-    f.write("\n")
-
-    f.write("precision = ")
-    f.write(str(precision_spox))
-    f.write("\n")
-
-    f.write("recall = ")
-    f.write(str(recall_spox))
-    f.write("\n")
-
-    f.write("f1 = ")
-    f.write(str(f1_spox))
-    f.write("\n")
-    f.close()
-
-    save_confusion_matrix(y_test, y_test_pred, output_name, str(classifier), cm_folder, run, classifier=dt)
-
-    directory = str(classifier) + '_revised_data'
-    parent_dir = os.path.join(cm_folder, directory)
-    if os.path.exists(parent_dir + "/") == False:
-        os.makedirs(parent_dir)
-    
-    path = (
-        parent_dir
-        + "/"
-        + str(output_name)
-        + "_"
-        + str(run)
-        + ".png"
-    )
-    
-    cm = confusion_matrix(y_spox, y_spox_pred)
-    cm = confusion_matrix(y_spox, y_spox_pred, labels=dt.classes_)
-    disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=dt.classes_)
-    disp = disp.plot(
-        include_values=True, cmap="viridis", ax=None, xticks_rotation="horizontal"
-    )
-
-    plt.grid(False)
-    plt.savefig(path)
-    plt.close()
-    
-    save_misclassified_data(
-        X_test, y_test, y_test_pred, output_name, str(classifier), mis_folder, run, threshold_value, threshold_use
-    )
-    
-    directory = str(classifier) + '_revised_data'
-    parent_dir = os.path.join(mis_folder, directory)
-    if os.path.exists(parent_dir + "/") == False:
-        os.makedirs(parent_dir)
-    
-    path = (
-        parent_dir
-        + "/"
-        + str(output_name)
-        + "_"
-        + str(run)
-        + ".csv"
-    )
-    
-    df = X_spox.copy(deep=True)
-
-    df["real"] = y_spox
-    df["pred"] = y_spox_pred
-
-    df_out = df[df["real"] != df["pred"]]
-    df_out.to_csv(path)
-    
-    del df, df_out
-    gc.collect()
-    
-    save_classified_general(
-            X_train, X_test, y_train, y_train_pred, y_test, y_test_pred, output_name, str(classifier), class_folder, run, None, None, False
-        )
-        
-    directory = str(classifier) + '_revised_data'
-    parent_dir = os.path.join(class_folder, directory)
-    if os.path.exists(parent_dir + "/") == False:
-        os.makedirs(parent_dir)
-    
-    path = (
-        parent_dir
-        + "/"
-        + str(output_name)
-        + "_"
-        + str(run)
-        + ".csv"
-    )
-    
-    df = X_spox.copy(deep=True)
-    df["real"] = y_spox
-    df["pred"] = y_spox_pred
-    df.to_csv(path)
-    
-    del df
-    gc.collect()
-    
-    #save_unknown_preds(spox_out, unknown_pred_folder, str(classifier), run, output_name)
-
-    return accuracy, precision, recall, f1, accuracy_spox, precision_spox, recall_spox, f1_spox, y_test_pred, y_train_pred
