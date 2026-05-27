@@ -14,8 +14,6 @@ from sklearn.inspection import permutation_importance
 
 from classifiers import *
 
-from platypus.algorithms import *
-
 from sklearn.metrics import confusion_matrix
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
@@ -25,23 +23,7 @@ from sklearn.metrics import (
     classification_report,
 )
 
-from skmoefs.rcs import RCSInitializer, RCSVariator
-from skmoefs.discretization.discretizer_base import fuzzyDiscretization
-from skmoefs.toolbox import (
-    MPAES_RCS,
-    load_dataset,
-    normalize,
-    is_object_present,
-    store_object,
-    load_object,
-)
-
 warnings.filterwarnings("ignore")
-
-
-variator = RCSVariator()
-discretizer = fuzzyDiscretization(numSet=5)
-initializer = RCSInitializer(discretizer=discretizer)
 
 
 def set_rng(seed):
@@ -130,6 +112,9 @@ def save_unknown_preds(df, folder, classifier_name, run, output_name):
     elif classifier_name == "deeptables":
         directory = "deeptables"
         parent_dir = os.path.join(folder, directory)
+    elif classifier_name == "tabpfn":
+        directory = "tabpfn"
+        parent_dir = os.path.join(folder, directory)
 
     if os.path.exists(parent_dir + "/") == False:
         # os.mkdir(parent_dir)
@@ -191,6 +176,9 @@ def save_metrics(
         parent_dir = os.path.join(folder, directory)
     elif classifier_name == "deeptables":
         directory = "deeptables"
+        parent_dir = os.path.join(folder, directory)
+    elif classifier_name == "tabpfn":
+        directory = "tabpfn"
         parent_dir = os.path.join(folder, directory)
 
     if os.path.exists(parent_dir + "/") == False:
@@ -264,6 +252,9 @@ def save_confusion_matrix(
         parent_dir = os.path.join(folder, directory)
     elif classifier_name == "deeptables":
         directory = "deeptables"
+        parent_dir = os.path.join(folder, directory)
+    elif classifier_name == "tabpfn":
+        directory = "tabpfn"
         parent_dir = os.path.join(folder, directory)
 
     if os.path.exists(parent_dir + "/") == False:
@@ -339,6 +330,9 @@ def save_misclassified_data(
         parent_dir = os.path.join(folder, directory)
     elif classifier_name == "deeptables":
         directory = "deeptables"
+        parent_dir = os.path.join(folder, directory)
+    elif classifier_name == "tabpfn":
+        directory = "tabpfn"
         parent_dir = os.path.join(folder, directory)
 
     if os.path.exists(parent_dir + "/") == False:
@@ -445,6 +439,9 @@ def save_classified_general(
         parent_dir = os.path.join(folder, directory)
     elif classifier_name == "deeptables":
         directory = "deeptables"
+        parent_dir = os.path.join(folder, directory)
+    elif classifier_name == "tabpfn":
+        directory = "tabpfn"
         parent_dir = os.path.join(folder, directory)
 
     if os.path.exists(parent_dir + "/") == False:
@@ -651,7 +648,7 @@ def save_statistical_report(accuracy, precision, recall, f1, output_name, folder
         os.makedirs(folder)
     path = folder + str(output_name) + ".txt"
 
-    algs = ["lda_th", "lda", "rf", "xgboost", "lda_rf", "frbc_th", "frbc", "lda_frbc", "deeptables"]
+    algs = ["lda_th", "lda", "rf", "xgboost", "lda_rf", "frbc_th", "frbc", "lda_frbc", "tabpfn"]
     metrics = ["accuracy", "precision", "recall", "fscore"]
 
     f = open(path, "w")
