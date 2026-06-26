@@ -1,12 +1,14 @@
 #!/bin/bash
-#SBATCH --job-name=MpoX-Classification
-#SBATCH --output=MpoX-Classification.txt
+#SBATCH --job-name=MpoX-Classification-devBRANCH-newtestfile
+#SBATCH --output=MpoX-Classification-devBRANCH-newtestfile.txt
 #SBATCH --cpus-per-task=128
-#SBATCH --time=72:00:00
+#SBATCH --time=48:00:00
+#SBATCH --partition=h100,h200,zki
 #SBATCH --mem=80GB
-#SBATCH --gres=local:30
+
+set -euo pipefail
 
 python main.py --input-file ../dataInputAll.csv \
- --test-file ../dataPredictionRevisionRep.csv \
- --outdir  ../2025_06_16-GBC-baseline \
+ --test-file ../InstrumentVergleich_Input.csv \
+ --outdir  2026_05_07-instrument \
  --filter ../Samples_Pre_MVA_Positive_SPox_2.csv
