@@ -12,11 +12,9 @@ import matplotlib.pyplot as plt
 import os
 from sklearn.inspection import permutation_importance
 
-from classifiers import *
+import joblib
 
 from sklearn.metrics import confusion_matrix
-from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import train_test_split
 from sklearn.metrics import (
     confusion_matrix,
     ConfusionMatrixDisplay,
@@ -25,100 +23,35 @@ from sklearn.metrics import (
 
 warnings.filterwarnings("ignore")
 
+CLASSIFIER_DIRS = {
+    "lda": "lda",
+    "lda_threshold": "lda_threshold",
+    "rf": "rf",
+    "lda_rf": "lda_rf",
+    "ensemble": "ensemble",
+    "xgboost": "xgboost",
+    "deeptables": "deeptables",
+    "tabpfn": "tabpfn",
+}
+
+DEFAULT_STAT_ALGORITHMS = ["lda_th", "lda", "rf", "xgboost", "lda_rf", "tabpfn"]
+
+
+def _classifier_parent(folder, classifier_name):
+    directory = CLASSIFIER_DIRS.get(classifier_name, classifier_name)
+    parent_dir = os.path.join(folder, directory)
+    os.makedirs(parent_dir, exist_ok=True)
+    return parent_dir
+
 
 def set_rng(seed):
     np.random.seed(seed)
     random.seed(seed)
 
 
-def frbc_get_params(alg_name):
-    M = None
-    Amin = None
-    nEvals = None
-    capacity = None
-    divisions = None
-    alg = None
-    
-    M = 200
-    Amin = 1
-    nEvals = 5000
-    capacity = 32
-    divisions = 8
-
-    params = []
-    params.append(M)
-    params.append(Amin)
-    params.append(nEvals)
-    params.append(capacity)
-    params.append(divisions)
-    params.append(alg)
-
-    return params
-
-
-def lda_frbc_get_params(alg_name):
-    M = None
-    Amin = None
-    nEvals = None
-    capacity = None
-    divisions = None
-    alg = None
-
-    M = 50
-    Amin = 1
-    nEvals = 5000
-    capacity = 32
-    divisions = 8
-
-    params = []
-    params.append(M)
-    params.append(Amin)
-    params.append(nEvals)
-    params.append(capacity)
-    params.append(divisions)
-    params.append(alg)
-
-    return params
-
 
 def save_unknown_preds(df, folder, classifier_name, run, output_name):
-    if classifier_name == "lda":
-        directory = "lda"
-        parent_dir = os.path.join(folder, directory)
-    elif classifier_name == "lda_threshold":
-        directory = "lda_threshold"
-        parent_dir = os.path.join(folder, directory)
-    elif classifier_name == "rf":
-        directory = "rf"
-        parent_dir = os.path.join(folder, directory)
-    elif classifier_name == "lda_rf":
-        directory = "lda_rf"
-        parent_dir = os.path.join(folder, directory)
-    elif classifier_name == "frbc":
-        directory = "frbc"
-        parent_dir = os.path.join(folder, directory)
-    elif classifier_name == "frbc_threshold":
-        directory = "frbc_threshold"
-        parent_dir = os.path.join(folder, directory)
-    elif classifier_name == "lda_frbc":
-        directory = "lda_frbc"
-        parent_dir = os.path.join(folder, directory)
-    elif classifier_name == "ensemble":
-        directory = "ensemble"
-        parent_dir = os.path.join(folder, directory)
-    elif classifier_name == "xgboost":
-        directory = "xgboost"
-        parent_dir = os.path.join(folder, directory)
-    elif classifier_name == "deeptables":
-        directory = "deeptables"
-        parent_dir = os.path.join(folder, directory)
-    elif classifier_name == "tabpfn":
-        directory = "tabpfn"
-        parent_dir = os.path.join(folder, directory)
-
-    if os.path.exists(parent_dir + "/") == False:
-        # os.mkdir(parent_dir)
-        os.makedirs(parent_dir)
+    parent_dir = _classifier_parent(folder, classifier_name)
     
     path = (
         parent_dir
@@ -145,45 +78,7 @@ def save_metrics(
     folder,
     run,
 ):
-    parent_dir = None
-    directory = None
-    if classifier_name == "lda":
-        directory = "lda"
-        parent_dir = os.path.join(folder, directory)
-    elif classifier_name == "lda_threshold":
-        directory = "lda_threshold"
-        parent_dir = os.path.join(folder, directory)
-    elif classifier_name == "rf":
-        directory = "rf"
-        parent_dir = os.path.join(folder, directory)
-    elif classifier_name == "lda_rf":
-        directory = "lda_rf"
-        parent_dir = os.path.join(folder, directory)
-    elif classifier_name == "frbc":
-        directory = "frbc"
-        parent_dir = os.path.join(folder, directory)
-    elif classifier_name == "frbc_threshold":
-        directory = "frbc_threshold"
-        parent_dir = os.path.join(folder, directory)
-    elif classifier_name == "lda_frbc":
-        directory = "lda_frbc"
-        parent_dir = os.path.join(folder, directory)
-    elif classifier_name == "ensemble":
-        directory = "ensemble"
-        parent_dir = os.path.join(folder, directory)
-    elif classifier_name == "xgboost":
-        directory = "xgboost"
-        parent_dir = os.path.join(folder, directory)
-    elif classifier_name == "deeptables":
-        directory = "deeptables"
-        parent_dir = os.path.join(folder, directory)
-    elif classifier_name == "tabpfn":
-        directory = "tabpfn"
-        parent_dir = os.path.join(folder, directory)
-
-    if os.path.exists(parent_dir + "/") == False:
-        # os.mkdir(parent_dir)
-        os.makedirs(parent_dir)
+    parent_dir = _classifier_parent(folder, classifier_name)
 
     path = (
         parent_dir
@@ -221,45 +116,7 @@ def save_metrics(
 def save_confusion_matrix(
     y_test, y_test_pred, output_name, classifier_name, folder, run, classifier
 ):
-    parent_dir = None
-    directory = None
-    if classifier_name == "lda":
-        directory = "lda"
-        parent_dir = os.path.join(folder, directory)
-    elif classifier_name == "lda_threshold":
-        directory = "lda_threshold"
-        parent_dir = os.path.join(folder, directory)
-    elif classifier_name == "rf":
-        directory = "rf"
-        parent_dir = os.path.join(folder, directory)
-    elif classifier_name == "lda_rf":
-        directory = "lda_rf"
-        parent_dir = os.path.join(folder, directory)
-    elif classifier_name == "frbc":
-        directory = "frbc"
-        parent_dir = os.path.join(folder, directory)
-    elif classifier_name == "frbc_threshold":
-        directory = "frbc_threshold"
-        parent_dir = os.path.join(folder, directory)
-    elif classifier_name == "lda_frbc":
-        directory = "lda_frbc"
-        parent_dir = os.path.join(folder, directory)
-    elif classifier_name == "ensemble":
-        directory = "ensemble"
-        parent_dir = os.path.join(folder, directory)
-    elif classifier_name == "xgboost":
-        directory = "xgboost"
-        parent_dir = os.path.join(folder, directory)
-    elif classifier_name == "deeptables":
-        directory = "deeptables"
-        parent_dir = os.path.join(folder, directory)
-    elif classifier_name == "tabpfn":
-        directory = "tabpfn"
-        parent_dir = os.path.join(folder, directory)
-
-    if os.path.exists(parent_dir + "/") == False:
-        # os.mkdir(parent_dir)
-        os.makedirs(parent_dir)
+    parent_dir = _classifier_parent(folder, classifier_name)
 
     path = (
         parent_dir
@@ -299,45 +156,7 @@ def save_misclassified_data(
     threshold_use, 
     ensemble_v="v1"
 ):
-    parent_dir = None
-    directory = None
-    if classifier_name == "lda":
-        directory = "lda"
-        parent_dir = os.path.join(folder, directory)
-    elif classifier_name == "lda_threshold":
-        directory = "lda_threshold"
-        parent_dir = os.path.join(folder, directory)
-    elif classifier_name == "rf":
-        directory = "rf"
-        parent_dir = os.path.join(folder, directory)
-    elif classifier_name == "lda_rf":
-        directory = "lda_rf"
-        parent_dir = os.path.join(folder, directory)
-    elif classifier_name == "frbc":
-        directory = "frbc"
-        parent_dir = os.path.join(folder, directory)
-    elif classifier_name == "frbc_threshold":
-        directory = "frbc_threshold"
-        parent_dir = os.path.join(folder, directory)
-    elif classifier_name == "lda_frbc":
-        directory = "lda_frbc"
-        parent_dir = os.path.join(folder, directory)
-    elif classifier_name == "ensemble":
-        directory = "ensemble"
-        parent_dir = os.path.join(folder, directory)
-    elif classifier_name == "xgboost":
-        directory = "xgboost"
-        parent_dir = os.path.join(folder, directory)
-    elif classifier_name == "deeptables":
-        directory = "deeptables"
-        parent_dir = os.path.join(folder, directory)
-    elif classifier_name == "tabpfn":
-        directory = "tabpfn"
-        parent_dir = os.path.join(folder, directory)
-
-    if os.path.exists(parent_dir + "/") == False:
-        # os.mkdir(parent_dir)
-        os.makedirs(parent_dir)
+    parent_dir = _classifier_parent(folder, classifier_name)
 
     path = (
         parent_dir
@@ -372,18 +191,7 @@ def save_misclassified_data(
 def save_classified_with_threshold(
     X_test, y_test, y_test_pred, output_name, classifier_name, folder, run, threshold_value, threshold_use
 ):
-    parent_dir = None
-    directory = None
-    if classifier_name == "lda_threshold":
-        directory = "lda_threshold"
-        parent_dir = os.path.join(folder, directory)
-    elif classifier_name == "frbc_threshold":
-        directory = "frbc_threshold"
-        parent_dir = os.path.join(folder, directory)
-
-    if os.path.exists(parent_dir + "/") == False:
-        # os.mkdir(parent_dir)
-        os.makedirs(parent_dir)
+    parent_dir = _classifier_parent(folder, classifier_name)
 
     path = (
         parent_dir
@@ -408,45 +216,7 @@ def save_classified_with_threshold(
 def save_classified_general(
     X_train, X_test, y_train, y_train_pred, y_test, y_test_pred, output_name, classifier_name, folder, run, conf_degrees_train, conf_degrees_test, threshold_use
 ):
-    if not os.path.exists(folder):
-        os.makedirs(folder)
-    if classifier_name == "lda":
-        directory = "lda"
-        parent_dir = os.path.join(folder, directory)
-    elif classifier_name == "lda_threshold":
-        directory = "lda_threshold"
-        parent_dir = os.path.join(folder, directory)
-    elif classifier_name == "rf":
-        directory = "rf"
-        parent_dir = os.path.join(folder, directory)
-    elif classifier_name == "lda_rf":
-        directory = "lda_rf"
-        parent_dir = os.path.join(folder, directory)
-    elif classifier_name == "frbc":
-        directory = "frbc"
-        parent_dir = os.path.join(folder, directory)
-    elif classifier_name == "frbc_threshold":
-        directory = "frbc_threshold"
-        parent_dir = os.path.join(folder, directory)
-    elif classifier_name == "lda_frbc":
-        directory = "lda_frbc"
-        parent_dir = os.path.join(folder, directory)
-    elif classifier_name == "ensemble":
-        directory = "ensemble"
-        parent_dir = os.path.join(folder, directory)
-    elif classifier_name == "xgboost":
-        directory = "xgboost"
-        parent_dir = os.path.join(folder, directory)
-    elif classifier_name == "deeptables":
-        directory = "deeptables"
-        parent_dir = os.path.join(folder, directory)
-    elif classifier_name == "tabpfn":
-        directory = "tabpfn"
-        parent_dir = os.path.join(folder, directory)
-
-    if os.path.exists(parent_dir + "/") == False:
-        # os.mkdir(parent_dir)
-        os.makedirs(parent_dir)
+    parent_dir = _classifier_parent(folder, classifier_name)
 
     path_train = (
         parent_dir
@@ -643,12 +413,13 @@ def export_feature_importance(X_train, y_train, X_test, y_test,
     plt.close(fig)
 
 
-def save_statistical_report(accuracy, precision, recall, f1, output_name, folder):
+def save_statistical_report(accuracy, precision, recall, f1, output_name, folder, algs=None):
     if not os.path.exists(folder):
         os.makedirs(folder)
     path = folder + str(output_name) + ".txt"
 
-    algs = ["lda_th", "lda", "rf", "xgboost", "lda_rf", "frbc_th", "frbc", "lda_frbc", "tabpfn"]
+    if algs is None:
+        algs = DEFAULT_STAT_ALGORITHMS
     metrics = ["accuracy", "precision", "recall", "fscore"]
 
     f = open(path, "w")
@@ -725,3 +496,18 @@ def save_statistical_report(accuracy, precision, recall, f1, output_name, folder
         f.write("\n")
         f.write("\n")
     f.close()
+
+
+def save_model(model, folder, name=None):
+    """Save a trained model using joblib. Creates `folder` if needed."""
+    os.makedirs(folder, exist_ok=True)
+    if name is None:
+        name = getattr(model, "__class__", type(model)).__name__ + ".joblib"
+    path = os.path.join(folder, name)
+    joblib.dump(model, path)
+    return path
+
+
+def load_model(path):
+    """Load a model saved with `save_model`."""
+    return joblib.load(path)
