@@ -714,14 +714,10 @@ def XGBoost(
         # add missing columns as 0
         for c in missing_cols:
             X_spox[c] = 0
-
         # drop unknown columns
         X_spox = X_spox.drop(columns=list(extra_cols))
-
         # reorder to match training exactly
         X_spox = X_spox[X_train.columns]
-
-        # now safe
         X_spox[X_spox.columns] = min_max_scaler.transform(X_spox)
 
     rf = GradientBoostingClassifier(n_estimators=n_est, max_depth=depth, random_state=seed).fit(
