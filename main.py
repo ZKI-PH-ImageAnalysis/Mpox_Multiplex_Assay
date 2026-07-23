@@ -41,7 +41,7 @@ def preprocess_spox(
 ):
     df_in = pd.read_csv(input_file, low_memory=False)
 
-    is_instrument_file = "sample_category" in df_in.columns
+    is_instrument_file = "sample_category" in df_in.columns or "highBG" in df_in.columns
 
     if "sample_name" in df_in.columns:
         df_in = df_in.rename(columns={"sample_name": "sampleID_meta"})
@@ -61,7 +61,11 @@ def preprocess_spox(
             "Neg.": "Pre",
         }
 
-        df_in["panel"] = df_in["sample_category"].map(mapping)
+        if "panel" not in df_in.columns:
+            df_in["panel"] = "Pre"
+            print("No panel column found, defaulting to 'Pre' for all samples.")
+        else:
+            df_in["panel"] = df_in["sample_category"].map(mapping)
 
         if df_in["panel"].isna().any():
             unknown = df_in[df_in["panel"].isna()]["sample_category"].unique()
@@ -85,12 +89,37 @@ def preprocess_spox(
 
         serostatus_IDs = serostatus_IDs["sampleID_meta"].unique()
 
-    df_in.replace([np.inf, -np.inf], np.nan, inplace=True)
 
+    cols_to_drop = df_in.columns[df_in.columns.str.endswith(exclude_features)]
+    df_in = df_in.drop(cols_to_drop, axis=1, errors="ignore")
+
+    df_in.replace([np.inf, -np.inf], np.nan, inplace=True)
     print(
         f"ATTENTION: Dataframe includes {df_in.isna().sum().sum()} NaNs. "
         f"These will be excluded."
     )
+    # Replace inf with NaN first
+    df_in.replace([np.inf, -np.inf], np.nan, inplace=True)
+
+    total_nans = df_in.isna().sum().sum()
+    print(f"ATTENTION: Dataframe includes {total_nans} NaNs.")
+
+    # Find rows containing at least one NaN
+    rows_with_nan = df_in[df_in.isna().any(axis=1)]
+
+    if len(rows_with_nan) > 0:
+        print(f"\nRemoving {len(rows_with_nan)} rows because they contain NaN values:\n")
+
+        for idx, row in rows_with_nan.iterrows():
+            nan_cols = row[row.isna()].index.tolist()
+            sample = row.get("sampleID_meta", idx)
+
+            print(
+                f"Row index={idx}, sampleID={sample}, "
+                f"NaN columns={nan_cols}"
+            )
+    else:
+        print("No rows contain NaN values.")
 
     df_in = df_in.dropna()
 
@@ -146,6 +175,20 @@ def preprocess_spox(
         df_spox = df_spox[df_spox["_merge"] == "left_only"].drop(columns=["_merge"])
 
         df_spox = df_spox.set_index("sampleID_meta")
+
+
+    rows_with_nan = df_spox[df_spox.isna().any(axis=1)]
+    if len(rows_with_nan) > 0:
+        print(f"\nFinal dataframe: removing {len(rows_with_nan)} rows with NaN values:\n")
+
+        for idx, row in rows_with_nan.iterrows():
+            nan_cols = row[row.isna()].index.tolist()
+            print(
+                f"sampleID={idx}, "
+                f"NaN columns={nan_cols}"
+            )
+
+    df_spox = df_spox.dropna()
 
     return df_spox
 
